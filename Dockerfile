@@ -14,7 +14,7 @@ ENV TAR_OPTIONS --no-same-owner
 
 ARG SBT_VERSION=1.4.8
 RUN cd /opt \
-  && curl -O https://github.com/sbt/sbt/releases/download/v${SBT_VERSION}/sbt-${SBT_VERSION}.tgz \
+  && curl -f -O https://github.com/sbt/sbt/releases/download/v${SBT_VERSION}/sbt-${SBT_VERSION}.tgz \
   && tar -xf sbt*.tgz \
   && rm sbt*.tgz
 ENV PATH ${PATH}:/opt/sbt/bin
