@@ -1,2 +1,7 @@
 image:
   file: Dockerfile
+
+vscode:
+  extensions:
+    - scalameta.metals@1.10.0:wOYpsld/e93zZ250A0uKHA==
+    - scala-lang.scala@0.5.0:3FIiaU1vnooQsX3PkBlBvQ==
