@@ -25,5 +25,5 @@ RUN cd /opt \
   && unzip karate*.zip \
   && rm karate*.zip \
   && mv karate* karate \
-  && sed -i -e 's,java -cp.*,java -cp "$(dirname "$0")/karate.jar":. com.intuit.karate.Main "$@",'
+  && sed -i -e 's,java -cp.*,java -cp "$(dirname "$0")/karate.jar":. com.intuit.karate.Main "$@",' karate/karate
 ENV PATH ${PATH}:/opt/karate
