@@ -18,3 +18,12 @@ RUN cd /opt \
   && tar -xf sbt*.tgz \
   && rm sbt*.tgz
 ENV PATH ${PATH}:/opt/sbt/bin
+
+ARG KARATE_VERSION=1.0.0
+RUN cd /opt \
+  && curl -fLO https://github.com/intuit/karate/releases/download/v${KARATE_VERSION}/karate-${KARATE_VERSION}.zip \
+  && unzip karate*.zip \
+  && rm karate*.zip \
+  && mv karate* karate \
+  && sed -i -e 's,java -cp.*,java -cp "$(dirname "$0")/karate.jar":. com.intuit.karate.Main "$@",'
+ENV PATH ${PATH}:/opt/karate
