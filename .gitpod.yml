@@ -1,6 +1,10 @@
 image:
   file: Dockerfile
 
+ports:
+  - port: 3000-8999
+    onOpen: ignore
+
 vscode:
   extensions:
     - scalameta.metals@1.10.0:wOYpsld/e93zZ250A0uKHA==
