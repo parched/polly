@@ -1,0 +1,12 @@
+#!/bin/bash
+
+root=$(pwd)/$(dirname "$0")
+
+# allow testing of multiple implementations
+programs_to_test=("java -jar $root/target/scala-3.0.0-RC1/polly-assembly-0.1.0.jar")
+
+for program in "${programs_to_test[@]}"
+do
+    echo TESTING: $program
+    karate tests/blocks.feature --configdir=tests --env="$program" || exit 1
+done
