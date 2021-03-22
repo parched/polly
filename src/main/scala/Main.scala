@@ -32,6 +32,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 object Main extends JsonSupport:
 
     def main(args: Array[String]): Unit =
+        val port = args.lift(0).map(_.toInt).getOrElse(8080)
 
         implicit val system = ActorSystem(Behaviors.empty, "my-system")
         // needed for the future flatMap/onComplete in the end
@@ -49,9 +50,9 @@ object Main extends JsonSupport:
             }
         )
 
-        val bindingFuture = Http().newServerAt("localhost", 8080).bind(route)
+        val bindingFuture = Http().newServerAt("localhost", port).bind(route)
 
-        println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
+        println(s"Server online at http://localhost:${port}/\nPress RETURN to stop...")
         StdIn.readLine() // let it run until user presses return
         bindingFuture
             .flatMap(_.unbind()) // trigger unbinding from the port
