@@ -14,8 +14,10 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
     val base64encoder = Base64.getEncoder()
     val base64decoder = Base64.getDecoder()
+
     def toBase64(data: List[Byte]): String =
         base64encoder.encodeToString(data.toArray)
+
     def fromBase64(data: String): List[Byte] =
         base64decoder.decode(data).toList
 
@@ -30,7 +32,6 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
 
 object Main extends JsonSupport:
-
     def main(args: Array[String]): Unit =
         val port = args.lift(0).map(_.toInt).getOrElse(8080)
 
@@ -38,14 +39,14 @@ object Main extends JsonSupport:
         // needed for the future flatMap/onComplete in the end
         implicit val executionContext = system.executionContext
 
-        var blockChain = List.empty[Block]
+        var blockChain: BlockChain = Nil
 
         val route = concat(
             (path("blocks") & get) {
                 complete(blockChain.toJson) // TODO: what import is needed to avoid toJson?
             },
             (path("data") & post & entity(as[ByteString])) { data =>
-                blockChain = BlockChain.addBlock(blockChain, data.toList)
+                blockChain = blockChain.addBlock(data.toList)
                 complete("block created")
             }
         )
