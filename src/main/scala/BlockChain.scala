@@ -12,6 +12,7 @@ extension (chain: BlockChain)
     def isValid: Boolean =
         !chain.view.sliding(2).exists(pair => pair.head.hash != pair.last.prevHash)
 
-    def addBlock(data: Data): BlockChain =
-        val prevHash = if chain.isEmpty then List.empty else chain.last.hash
-        chain :+ Block(prevHash, data)
+    def lastHash: Hash = if chain.isEmpty then List.empty else chain.last.hash
+
+    def addData(data: Data): BlockChain =
+        chain :+ Block(chain.lastHash, data)

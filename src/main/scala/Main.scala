@@ -34,6 +34,8 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
              Block(fromBase64(prevHash), fromBase64(data))
             case _ => throw DeserializationException("Block expected")
 
+    implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
+
 object Main extends JsonSupport:
     def main(args: Array[String]): Unit =
         val port = args.lift(0).map(_.toInt).getOrElse(8080)
@@ -50,8 +52,12 @@ object Main extends JsonSupport:
                 complete((actor ? Message.GetBlocks.apply).mapTo[BlockChain].map(_.toJson)) // TODO: what import is needed to avoid toJson?
             },
             (path("data") & post & entity(as[ByteString])) { data =>
-                actor ! Message.AddData(data.toList)
+                actor ! Message.CreateBlock(data.toList)
                 complete("block created")
+            }, // TODO: how about blocks/i for get and post
+            (path("block") & put & entity(as[Message.InsertBlock])) { block =>
+                actor ! block
+                complete("block inserted")
             }
         )
 

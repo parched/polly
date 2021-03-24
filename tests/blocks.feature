@@ -3,13 +3,13 @@ Feature: creating and reading the blocks.
 Background:
     * url 'http://localhost:8080'
 
-Scenario: get initial blocks
+Scenario: The initial blocks are empty
     Given path 'blocks'
     When method get
     Then status 200
     And match response == []
 
-Scenario: create a block
+Scenario: A created block is added to the chain
     Given path 'data'
     And request 'abcd'
     When method post
@@ -21,7 +21,7 @@ Scenario: create a block
     Then status 200
     And match response == [{data: 'YWJjZA==', prev_hash: ''}]
 
-Scenario: create a second block
+Scenario: A second created block is added to the chain
     Given path 'data'
     And request 'abcd'
     When method post
@@ -33,7 +33,69 @@ Scenario: create a second block
     Given path 'blocks'
     When method get
     Then status 200
-    And match response == 
+    And match response ==
+    """
+    [
+        {data: 'YWJjZA==', prev_hash: ''},
+        {data: 'eHl6', prev_hash: 'iNQmb9TmM40TuEX88olXnSCciXgjuSF9o+Fhk28DFYk='}
+    ]
+    """
+
+Scenario: A block inserted at 0 on an empty chain is added to it
+    Given path 'block'
+    And request {index: 0, block: {data: 'YWJjZA==', prev_hash: ''}}
+    When method put
+    Then status 200
+    And match response == 'block inserted'
+
+    Given path 'blocks'
+    When method get
+    Then status 200
+    And match response == [{data: 'YWJjZA==', prev_hash: ''}]
+
+Scenario: A block inserted with the wrong previous hash is not added to the chain
+    Given path 'block'
+    And request {index: 0, block: {data: 'YWJjZA==', prev_hash: 'wrongBecauseItShouldBeEmptyForFirstBlock'}}
+    When method put
+    Then status 200
+    And match response == 'block inserted'
+
+    Given path 'blocks'
+    When method get
+    Then status 200
+    And match response == []
+
+Scenario: A block inserted at 0 twice does only add one block
+    Given path 'block'
+    And request {index: 0, block: {data: 'YWJjZA==', prev_hash: ''}}
+    When method put
+    Then status 200
+
+    Given path 'block'
+    And request {index: 0, block: {data: 'otherData999', prev_hash: ''}}
+    When method put
+    Then status 200
+
+    Given path 'blocks'
+    When method get
+    Then status 200
+    And match response == [{data: 'YWJjZA==', prev_hash: ''}]
+
+Scenario: A block inserted at the end of non-empty chain is added
+    Given path 'block'
+    And request {index: 0, block: {data: 'YWJjZA==', prev_hash: ''}}
+    When method put
+    Then status 200
+
+    Given path 'block'
+    And request {index: 1, block: {data: 'eHl6', prev_hash: 'iNQmb9TmM40TuEX88olXnSCciXgjuSF9o+Fhk28DFYk='}}
+    When method put
+    Then status 200
+
+    Given path 'blocks'
+    When method get
+    Then status 200
+    And match response ==
     """
     [
         {data: 'YWJjZA==', prev_hash: ''},
