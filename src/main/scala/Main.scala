@@ -1,9 +1,13 @@
-import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.AskPattern.*
+import akka.actor.typed.{ ActorRef, ActorSystem }
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.*
 import akka.http.scaladsl.server.Directives.*
-import akka.util.ByteString
+import akka.util.{ ByteString, Timeout }
+
+import scala.concurrent.duration.*
+import scala.concurrent.{ ExecutionContext, Future }
 import scala.io.StdIn
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
@@ -30,23 +34,23 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
              Block(fromBase64(prevHash), fromBase64(data))
             case _ => throw DeserializationException("Block expected")
 
-
 object Main extends JsonSupport:
     def main(args: Array[String]): Unit =
         val port = args.lift(0).map(_.toInt).getOrElse(8080)
 
-        implicit val system = ActorSystem(Behaviors.empty, "my-system")
+        implicit val system = ActorSystem(next(Nil), "blockchain")
         // needed for the future flatMap/onComplete in the end
         implicit val executionContext = system.executionContext
 
-        var blockChain: BlockChain = Nil
+        val actor: ActorRef[Message] = system
 
         val route = concat(
             (path("blocks") & get) {
-                complete(blockChain.toJson) // TODO: what import is needed to avoid toJson?
+                implicit val timeout: Timeout = 5.seconds
+                complete((actor ? Message.GetBlocks.apply).mapTo[BlockChain].map(_.toJson)) // TODO: what import is needed to avoid toJson?
             },
             (path("data") & post & entity(as[ByteString])) { data =>
-                blockChain = blockChain.addBlock(data.toList)
+                actor ! Message.AddData(data.toList)
                 complete("block created")
             }
         )
