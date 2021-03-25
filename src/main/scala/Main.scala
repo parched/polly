@@ -10,37 +10,13 @@ import scala.concurrent.duration.*
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.io.StdIn
 
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import spray.json.*
-
-trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
-    import java.util.Base64
-
-    val base64encoder = Base64.getEncoder()
-    val base64decoder = Base64.getDecoder()
-
-    def toBase64(data: List[Byte]): String =
-        base64encoder.encodeToString(data.toArray)
-
-    def fromBase64(data: String): List[Byte] =
-        base64decoder.decode(data).toList
-
-    implicit object BlockJsonFormat extends RootJsonFormat[Block]:
-        def write(b: Block) =
-            JsObject("prev_hash" -> JsString(toBase64(b.prevHash)), "data" -> JsString(toBase64(b.data)))
-
-        def read(value: JsValue) = value.asJsObject.getFields("prev_hash", "data") match
-            case Seq(JsString(prevHash), JsString(data)) =>
-             Block(fromBase64(prevHash), fromBase64(data))
-            case _ => throw DeserializationException("Block expected")
-
-    implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
+import spray.json.enrichAny
 
 object Main extends JsonSupport:
     def main(args: Array[String]): Unit =
         val port = args.lift(0).map(_.toInt).getOrElse(8080)
 
-        implicit val system = ActorSystem(next(Nil), "blockchain")
+        implicit val system = ActorSystem(BlockChainActor(), "blockchain")
         // needed for the future flatMap/onComplete in the end
         implicit val executionContext = system.executionContext
 
@@ -58,6 +34,11 @@ object Main extends JsonSupport:
             (path("block") & put & entity(as[Message.InsertBlock])) { block =>
                 actor ! block
                 complete("block inserted")
+            },
+            (path("peers") & put & entity(as[String])) { uri =>
+                // TODO: validate as much a possible
+                actor ! Message.AddPeer(Uri(uri).withoutFragment) // discard other bits
+                complete("peer inserted")
             }
         )
 

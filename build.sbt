@@ -14,5 +14,6 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
       "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion
     ).map(_.withDottyCompat(scalaVersion.value)),
+    libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
     useScala3doc := true
   )

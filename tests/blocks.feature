@@ -1,7 +1,7 @@
 Feature: creating and reading the blocks.
 
 Background:
-    * url 'http://localhost:8080'
+    * url 'http://localhost:7000'
 
 Scenario: The initial blocks are empty
     Given path 'blocks'
