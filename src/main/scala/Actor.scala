@@ -1,20 +1,25 @@
 import akka.actor.typed.ActorRef
-import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.{ ActorContext, Behaviors }
+
+import akka.stream.*
+import akka.stream.scaladsl.*
+
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.*
 import akka.http.scaladsl.marshalling.Marshal
-
-
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import spray.json.*
 
-import scala.util.{ Failure, Success }
+import scala.util.{ Try, Failure, Success }
+import scala.concurrent.Future
 
 enum Message:
     case CreateBlock(data: Data)
     case GetBlocks(replyTo: ActorRef[BlockChain])
     case InsertBlock(index: Int, block: Block)
     case AddPeer(uri: Uri)
+    case SetBlocks(blocks: BlockChain)
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
@@ -53,13 +58,16 @@ object BlockChainActor extends JsonSupport:
             // broadcast it
             implicit val system = ctx.system
             implicit val executionContext = system.executionContext
-            state.peers.foreach(peer => Http().singleRequest(
-                HttpRequest(
-                    method = HttpMethods.PUT,
-                    uri = peer.withPath(Uri.Path("/block")),
-                    entity = HttpEntity(ContentTypes.`application/json`, block)
-                )
-            ).map(_.discardEntityBytes())
+            state.peers.foreach(peer =>
+                Http()
+                    .singleRequest(
+                        HttpRequest(
+                            method = HttpMethods.PUT,
+                            uri = peer.withPath(Uri.Path("/block")),
+                            entity = HttpEntity(ContentTypes.`application/json`, block)
+                        )
+                    )
+                    .map(_.discardEntityBytes())
             )
 
             next(state.copy(chain = newChain))
@@ -74,10 +82,44 @@ object BlockChainActor extends JsonSupport:
                 next(state.copy(chain = state.chain :+ block))
             else if index < state.chain.length then
                 Behaviors.same
-            else
-                next(state /* TODO consensus */)
+            else // TODO: skip resolve if already doing it
+                resolve(ctx, state)
 
         case (ctx, Message.AddPeer(peer)) =>
             ctx.log.info(s"Peer added: $peer")
             next(state.copy(peers = state.peers + peer))
+
+        case (ctx, Message.SetBlocks(blocks)) =>
+            ctx.log.info(s"Blockchain reset: $blocks")
+            next(state.copy(chain = blocks))
     }
+
+    def resolve(ctx: ActorContext[Message], state: State): Behaviors.Receive[Message] =
+        implicit val system = ctx.system
+        implicit val executionContext = system.executionContext
+        val getBlocks: Uri => Future[Try[BlockChain]] = peer =>
+            Http()
+                .singleRequest(
+                    HttpRequest(
+                        method = HttpMethods.GET,
+                        uri = peer.withPath(Uri.Path("/blocks"))
+                    )
+                )
+                .flatMap(Unmarshal(_).to[BlockChain])
+                .transform(Success(_))
+
+        val replyToSelf: ActorRef[Message] = ctx.self
+
+        // longest valid chain is the simplest resolution
+        Source(state.peers)
+            .mapAsyncUnordered(4)(getBlocks)
+            .collect {
+                case Success(blocks) => blocks
+            }
+            // the length filter isn't strictly necessary but it saves
+            // validating the whole chain if not needed
+            .filter(chain => chain.length > state.chain.length && chain.isValid)
+            .fold(state.chain)((currentLongest, next) => if next.length > currentLongest.length then next else currentLongest)
+            .runForeach(replyToSelf ! Message.SetBlocks(_))
+
+        next(state)
