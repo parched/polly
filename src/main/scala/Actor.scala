@@ -99,7 +99,7 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
     }
 
     def resolve(state: BlockChainActor.State): Behaviors.Receive[Message] =
-        val getBlocks: Uri => Future[Try[BlockChain]] = peer =>
+        val getBlocks: Uri => Future[BlockChain] = peer =>
             Http()
                 .singleRequest(
                     HttpRequest(
@@ -108,20 +108,19 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
                     )
                 )
                 .flatMap(Unmarshal(_).to[BlockChain])
-                .transform(Success(_))
 
         val replyToSelf: ActorRef[Message] = context.self
 
         // longest valid chain is the simplest resolution
         Source(state.peers)
-            .mapAsyncUnordered(4)(getBlocks)
+            // transform and ignore failures rather than failing the stream
+            .mapAsyncUnordered(4)(getBlocks(_).transform(Success(_)))
             .collect {
                 case Success(blocks) => blocks
             }
-            // the length filter isn't strictly necessary but it saves
-            // validating the whole chain if not needed
-            .filter(chain => chain.length > state.chain.length && chain.isValid)
-            .fold(state.chain)((currentLongest, next) => if next.length > currentLongest.length then next else currentLongest)
+            .fold(state.chain)((currentLongest, next) =>
+                if next.length > currentLongest.length && next.isValid then next else currentLongest
+            )
             .runForeach(replyToSelf ! Message.SetBlocks(_))
 
         next(state)
