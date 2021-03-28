@@ -1,4 +1,4 @@
-import akka.actor.typed.ActorRef
+import akka.actor.typed.{ ActorRef, ActorSystem }
 import akka.actor.typed.scaladsl.{ ActorContext, Behaviors }
 
 import akka.stream.*
@@ -12,7 +12,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import spray.json.*
 
 import scala.util.{ Try, Failure, Success }
-import scala.concurrent.Future
+import scala.concurrent.{ ExecutionContext, Future }
 
 enum Message:
     case CreateBlock(data: Data)
@@ -44,20 +44,24 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
     implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
 
-object BlockChainActor extends JsonSupport:
+object BlockChainActor:
     case class State(chain: BlockChain, peers: Set[Uri])
 
-    def apply() = next(State(Nil, Set.empty))
+    def apply() = Behaviors.setup[Message] { context =>
+        new BlockChainActor(context).next(State(Nil, Set.empty))
+    }
 
-    def next(state: State): Behaviors.Receive[Message] = Behaviors.receive {
-        case (ctx, Message.CreateBlock(data)) =>
+class BlockChainActor private (context: ActorContext[Message]) extends JsonSupport:
+    implicit val system: ActorSystem[Nothing] = context.system
+    implicit val systemEc: ExecutionContext = system.executionContext
+
+    def next(state: BlockChainActor.State): Behaviors.Receive[Message] = Behaviors.receiveMessage {
+        case Message.CreateBlock(data) =>
             val newChain = state.chain.addData(data)
             val block = Message.InsertBlock(newChain.length - 1, newChain.last).toJson.toString
-            ctx.log.info(s"Block created: $block")
+            context.log.info(s"Block created: $block")
 
             // broadcast it
-            implicit val system = ctx.system
-            implicit val executionContext = system.executionContext
             state.peers.foreach(peer =>
                 Http()
                     .singleRequest(
@@ -72,31 +76,29 @@ object BlockChainActor extends JsonSupport:
 
             next(state.copy(chain = newChain))
 
-        case (_, Message.GetBlocks(replyTo)) =>
+        case Message.GetBlocks(replyTo) =>
             replyTo ! state.chain
             Behaviors.same
 
-        case (ctx, Message.InsertBlock(index, block)) =>
+        case Message.InsertBlock(index, block) =>
             if index == state.chain.length && block.prevHash == state.chain.lastHash then
-                ctx.log.info(s"Block inserted at $index: $block")
+                context.log.info(s"Block inserted at $index: $block")
                 next(state.copy(chain = state.chain :+ block))
             else if index < state.chain.length then
                 Behaviors.same
             else // TODO: skip resolve if already doing it
-                resolve(ctx, state)
+                resolve(state)
 
-        case (ctx, Message.AddPeer(peer)) =>
-            ctx.log.info(s"Peer added: $peer")
+        case Message.AddPeer(peer) =>
+            context.log.info(s"Peer added: $peer")
             next(state.copy(peers = state.peers + peer))
 
-        case (ctx, Message.SetBlocks(blocks)) =>
-            ctx.log.info(s"Blockchain reset: $blocks")
+        case Message.SetBlocks(blocks) =>
+            context.log.info(s"Blockchain reset: $blocks")
             next(state.copy(chain = blocks))
     }
 
-    def resolve(ctx: ActorContext[Message], state: State): Behaviors.Receive[Message] =
-        implicit val system = ctx.system
-        implicit val executionContext = system.executionContext
+    def resolve(state: BlockChainActor.State): Behaviors.Receive[Message] =
         val getBlocks: Uri => Future[Try[BlockChain]] = peer =>
             Http()
                 .singleRequest(
@@ -108,7 +110,7 @@ object BlockChainActor extends JsonSupport:
                 .flatMap(Unmarshal(_).to[BlockChain])
                 .transform(Success(_))
 
-        val replyToSelf: ActorRef[Message] = ctx.self
+        val replyToSelf: ActorRef[Message] = context.self
 
         // longest valid chain is the simplest resolution
         Source(state.peers)
