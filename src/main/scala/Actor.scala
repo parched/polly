@@ -36,10 +36,15 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
             base64decoder.decode(data).toList
 
         def write(b: Block) =
-            JsObject("prev_hash" -> JsString(toBase64(b.prevHash)), "data" -> JsString(toBase64(b.data)))
+            JsObject(
+                "prev_hash" -> JsString(toBase64(b.prevHash)),
+                "data" -> JsString(toBase64(b.data)),
+                "modifier" -> JsNumber(b.hashModifier)
+            )
 
-        def read(value: JsValue) = value.asJsObject.getFields("prev_hash", "data") match
-            case Seq(JsString(prevHash), JsString(data)) => Block(fromBase64(prevHash), fromBase64(data))
+        def read(value: JsValue) = value.asJsObject.getFields("prev_hash", "data", "modifier") match
+            case Seq(JsString(prevHash), JsString(data), JsNumber(modifier)) =>
+                Block(fromBase64(prevHash), fromBase64(data), modifier.toInt)
             case _ => throw DeserializationException("Block expected")
 
     implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
@@ -66,10 +71,12 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
     def next(state: State): Behaviors.Receive[Message] = Behaviors.receiveMessage {
         case Message.CreateBlock(data) =>
             if state.ourData.contains(data) then
+                context.log.info(s"Ignoring duplicate data")
                 Behaviors.same
             else
                 context.log.info(s"Creating new block")
                 val mineInProgress = state.mineInProgress.getOrElse {
+                    context.log.info(s"Spawning miner due to data added")
                     spawnMiner(state.chain, data)
                 }
                 next(state.copy(ourData = state.ourData + data, mineInProgress = Some(mineInProgress)))
@@ -79,14 +86,23 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
             Behaviors.same
 
         case Message.InsertBlock(index, block) =>
-            if index == state.chain.length && block.prevHash == state.chain.lastHash then
-                context.log.info(s"Block inserted")
-                next(newChain(state, state.chain :+ block))
-            else if index < state.chain.length then
+            if index < state.chain.length then
+                context.log.info(s"Ignoring too old block")
                 Behaviors.same
-            else // TODO: skip resolve if already doing it
+            else if !block.hash.isValidBlockHash then
+                context.log.info(s"Ignoring block with invalid hash")
+                Behaviors.same
+            else if index > state.chain.length then
+                // TODO: skip resolve if already doing it
+                context.log.info(s"Received block too new so resolving")
                 resolve(state)
                 Behaviors.same
+            else if block.prevHash != state.chain.lastHash then
+                context.log.info(s"Ignoring block with invalid previous hash")
+                Behaviors.same
+            else
+                context.log.info(s"Block inserted")
+                next(newChain(state, state.chain :+ block))
 
         case Message.AddPeer(peer) =>
             context.log.info(s"Peer added: $peer")
@@ -142,20 +158,28 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
             }
 
         // cancel the mine in progress because it needs a new prevHash
-        state.mineInProgress.foreach(_())
+        state.mineInProgress.foreach(cancel =>
+            context.log.info(s"Cancelling miner due to chain modification")
+            cancel()
+        )
         // start a new one (this isn't a very optimal way for a big chain)
         val dataInChain = newChain.map(_.data).toSet
         val mineInProgress = state
             .ourData
             .find(!dataInChain.contains(_))
-            .map(spawnMiner(newChain, _))
+            .map(data =>
+                context.log.info(s"Spawning miner due to chain modification")
+                spawnMiner(newChain, data)
+            )
 
         state.copy(chain = newChain, mineInProgress = mineInProgress)
 
     def spawnMiner(chain: BlockChain, data: Data): () => Unit =
         val cancel = Promise[Unit]
+        // TODO: use a dedicated dispatcher or execution context
         Future {
-            if !cancel.isCompleted then
-                replyToSelf ! Message.InsertBlock(chain.length, Block(chain.lastHash, data))
+            Block
+                .mine(chain.lastHash, data, () => cancel.isCompleted)
+                .foreach(replyToSelf ! Message.InsertBlock(chain.length, _))
         }
         () => cancel.success(())
