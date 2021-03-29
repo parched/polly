@@ -84,3 +84,40 @@ Scenario: New block inserted at end of chain is broadcast to peers
     And path '__test/log/put/block'
     And retry until responseStatus == 200 && JSON.stringify(response) == JSON.stringify([index0AndSomeValidBlock])
     And method get
+
+Scenario: Data removed from chain by peers is recreated on top
+    # setup mock
+    Given url mockUrl
+    And path '__test/blocks'
+    And request someChainWith2ValidBlocks
+    And method put
+    And status 200
+
+    When url testNodeUrl
+    And path 'peers'
+    And request mockUrl
+    And method put
+    And status 200
+
+    And path 'data'
+    And request 'MY DATA'
+    And method post
+    And status 200
+
+    And path 'block'
+    And request {index: 1, block: {data: 'eHl6', prev_hash: 'iNQmb9TmM40TuEX88olXnSCciXgjuSF9o+Fhk28DFYk='}}
+    And method put
+    And status 200
+
+    Then path 'blocks'
+    * def isDone =
+    """
+    function() {
+        return responseStatus == 200 &&
+        response.length == 3 &&
+        JSON.stringify(response.slice(0, 2)) == JSON.stringify(someChainWith2ValidBlocks)
+        response.data == "TVkgREFUQQ=="
+    }
+    """
+    And retry until isDone()
+    And method get

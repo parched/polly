@@ -12,7 +12,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import spray.json.*
 
 import scala.util.{ Try, Failure, Success }
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ ExecutionContext, Future, Promise }
 
 enum Message:
     case CreateBlock(data: Data)
@@ -45,20 +45,34 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
     implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
 
 object BlockChainActor:
-    case class State(chain: BlockChain, peers: Set[Uri])
+    case class State(
+        chain: BlockChain,
+        peers: Set[Uri], 
+        ourData: Set[Data],
+        mineInProgress: Option[() => Unit]
+    )
 
     def apply() = Behaviors.setup[Message] { context =>
-        new BlockChainActor(context).next(State(Nil, Set.empty))
+        new BlockChainActor(context).next(State(Nil, Set.empty, Set.empty, None))
     }
 
 class BlockChainActor private (context: ActorContext[Message]) extends JsonSupport:
+    import BlockChainActor.*
+
     implicit val system: ActorSystem[Nothing] = context.system
     implicit val systemEc: ExecutionContext = system.executionContext
+    val replyToSelf: ActorRef[Message] = context.self
 
-    def next(state: BlockChainActor.State): Behaviors.Receive[Message] = Behaviors.receiveMessage {
+    def next(state: State): Behaviors.Receive[Message] = Behaviors.receiveMessage {
         case Message.CreateBlock(data) =>
-            context.log.info(s"Block created")
-            newChain(state, state.chain.addData(data))
+            if state.ourData.contains(data) then
+                Behaviors.same
+            else
+                context.log.info(s"Creating new block")
+                val mineInProgress = state.mineInProgress.getOrElse {
+                    spawnMiner(state.chain, data)
+                }
+                next(state.copy(ourData = state.ourData + data, mineInProgress = Some(mineInProgress)))
 
         case Message.GetBlocks(replyTo) =>
             replyTo ! state.chain
@@ -67,11 +81,12 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
         case Message.InsertBlock(index, block) =>
             if index == state.chain.length && block.prevHash == state.chain.lastHash then
                 context.log.info(s"Block inserted")
-                newChain(state, state.chain :+ block)
+                next(newChain(state, state.chain :+ block))
             else if index < state.chain.length then
                 Behaviors.same
             else // TODO: skip resolve if already doing it
                 resolve(state)
+                Behaviors.same
 
         case Message.AddPeer(peer) =>
             context.log.info(s"Peer added: $peer")
@@ -79,10 +94,10 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
 
         case Message.SetBlocks(blocks) =>
             context.log.info(s"Blockchain reset")
-            newChain(state, blocks)
+            next(newChain(state, blocks))
     }
 
-    def resolve(state: BlockChainActor.State): Behaviors.Receive[Message] =
+    def resolve(state: State): Unit =
         val getBlocks: Uri => Future[BlockChain] = peer =>
             Http()
                 .singleRequest(
@@ -92,8 +107,6 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
                     )
                 )
                 .flatMap(Unmarshal(_).to[BlockChain])
-
-        val replyToSelf: ActorRef[Message] = context.self
 
         // longest valid chain is the simplest resolution
         Source(state.peers)
@@ -107,9 +120,7 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
             )
             .runForeach(replyToSelf ! Message.SetBlocks(_))
 
-        next(state)
-
-    def newChain(state: BlockChainActor.State, newChain: BlockChain): Behaviors.Receive[Message] =
+    def newChain(state: State, newChain: BlockChain): State =
         newChain
             .lastOption
             .filterNot(state.chain.lastOption.contains(_)) // skip broadcast if it's the same
@@ -130,4 +141,21 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
                 )
             }
 
-        next(state.copy(chain = newChain))
+        // cancel the mine in progress because it needs a new prevHash
+        state.mineInProgress.foreach(_())
+        // start a new one (this isn't a very optimal way for a big chain)
+        val dataInChain = newChain.map(_.data).toSet
+        val mineInProgress = state
+            .ourData
+            .find(!dataInChain.contains(_))
+            .map(spawnMiner(newChain, _))
+
+        state.copy(chain = newChain, mineInProgress = mineInProgress)
+
+    def spawnMiner(chain: BlockChain, data: Data): () => Unit =
+        val cancel = Promise[Unit]
+        Future {
+            if !cancel.isCompleted then
+                replyToSelf ! Message.InsertBlock(chain.length, Block(chain.lastHash, data))
+        }
+        () => cancel.success(())

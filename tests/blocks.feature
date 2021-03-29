@@ -14,7 +14,7 @@ Scenario: A created block is added to the chain
     And request 'abcd'
     When method post
     Then status 200
-    And match response == 'block created'
+    And match response == 'creating block'
 
     Given path 'blocks'
     When method get

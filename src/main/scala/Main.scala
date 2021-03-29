@@ -20,16 +20,17 @@ object Main extends JsonSupport:
         // needed for the future flatMap/onComplete in the end
         implicit val executionContext = system.executionContext
 
+        implicit val timeout: Timeout = 5.seconds
+
         val actor: ActorRef[Message] = system
 
         val route = concat(
             (path("blocks") & get) {
-                implicit val timeout: Timeout = 5.seconds
-                complete((actor ? Message.GetBlocks.apply).mapTo[BlockChain].map(_.toJson)) // TODO: what import is needed to avoid toJson?
+                complete(actor.ask[BlockChain](Message.GetBlocks(_)).map(_.toJson)) // TODO: what import is needed to avoid toJson?
             },
             (path("data") & post & entity(as[ByteString])) { data =>
                 actor ! Message.CreateBlock(data.toList)
-                complete("block created")
+                complete("creating block")
             }, // TODO: how about blocks/i for get and post
             (path("block") & put & entity(as[Message.InsertBlock])) { block =>
                 actor ! block
