@@ -57,24 +57,8 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
 
     def next(state: BlockChainActor.State): Behaviors.Receive[Message] = Behaviors.receiveMessage {
         case Message.CreateBlock(data) =>
-            val newChain = state.chain.addData(data)
-            val block = Message.InsertBlock(newChain.length - 1, newChain.last).toJson.toString
-            context.log.info(s"Block created: $block")
-
-            // broadcast it
-            state.peers.foreach(peer =>
-                Http()
-                    .singleRequest(
-                        HttpRequest(
-                            method = HttpMethods.PUT,
-                            uri = peer.withPath(Uri.Path("/block")),
-                            entity = HttpEntity(ContentTypes.`application/json`, block)
-                        )
-                    )
-                    .map(_.discardEntityBytes())
-            )
-
-            next(state.copy(chain = newChain))
+            context.log.info(s"Block created")
+            newChain(state, state.chain.addData(data))
 
         case Message.GetBlocks(replyTo) =>
             replyTo ! state.chain
@@ -82,8 +66,8 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
 
         case Message.InsertBlock(index, block) =>
             if index == state.chain.length && block.prevHash == state.chain.lastHash then
-                context.log.info(s"Block inserted at $index: $block")
-                next(state.copy(chain = state.chain :+ block))
+                context.log.info(s"Block inserted")
+                newChain(state, state.chain :+ block)
             else if index < state.chain.length then
                 Behaviors.same
             else // TODO: skip resolve if already doing it
@@ -94,8 +78,8 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
             next(state.copy(peers = state.peers + peer))
 
         case Message.SetBlocks(blocks) =>
-            context.log.info(s"Blockchain reset: $blocks")
-            next(state.copy(chain = blocks))
+            context.log.info(s"Blockchain reset")
+            newChain(state, blocks)
     }
 
     def resolve(state: BlockChainActor.State): Behaviors.Receive[Message] =
@@ -124,3 +108,26 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
             .runForeach(replyToSelf ! Message.SetBlocks(_))
 
         next(state)
+
+    def newChain(state: BlockChainActor.State, newChain: BlockChain): Behaviors.Receive[Message] =
+        newChain
+            .lastOption
+            .filterNot(state.chain.lastOption.contains(_)) // skip broadcast if it's the same
+            .map(Message.InsertBlock(newChain.length - 1, _).toJson.toString)
+            .foreach { block =>
+                context.log.info(s"New last block: $block")
+
+                state.peers.foreach(peer =>
+                    Http()
+                        .singleRequest(
+                            HttpRequest(
+                                method = HttpMethods.PUT,
+                                uri = peer.withPath(Uri.Path("/block")),
+                                entity = HttpEntity(ContentTypes.`application/json`, block)
+                            )
+                        )
+                        .map(_.discardEntityBytes())
+                )
+            }
+
+        next(state.copy(chain = newChain))
