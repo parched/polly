@@ -16,10 +16,10 @@ import scala.concurrent.{ ExecutionContext, Future, Promise }
 
 enum Message:
     case CreateBlock(data: Data)
-    case GetBlocks(replyTo: ActorRef[BlockChain])
+    case GetBlocks(replyTo: ActorRef[Blockchain])
     case InsertBlock(index: Int, block: Block)
     case AddPeer(uri: Uri)
-    case SetBlocks(blocks: BlockChain)
+    case SetBlocks(blocks: Blockchain)
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
@@ -49,20 +49,20 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
     implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
 
-object BlockChainActor:
+object BlockchainActor:
     case class State(
-        chain: BlockChain,
+        chain: Blockchain,
         peers: Set[Uri], 
         ourData: Set[Data],
         mineInProgress: Option[() => Unit]
     )
 
     def apply() = Behaviors.setup[Message] { context =>
-        new BlockChainActor(context).next(State(Nil, Set.empty, Set.empty, None))
+        new BlockchainActor(context).next(State(Nil, Set.empty, Set.empty, None))
     }
 
-class BlockChainActor private (context: ActorContext[Message]) extends JsonSupport:
-    import BlockChainActor.*
+class BlockchainActor private (context: ActorContext[Message]) extends JsonSupport:
+    import BlockchainActor.*
 
     implicit val system: ActorSystem[Nothing] = context.system
     implicit val systemEc: ExecutionContext = system.executionContext
@@ -114,7 +114,7 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
     }
 
     def resolve(state: State): Unit =
-        val getBlocks: Uri => Future[BlockChain] = peer =>
+        val getBlocks: Uri => Future[Blockchain] = peer =>
             Http()
                 .singleRequest(
                     HttpRequest(
@@ -122,7 +122,7 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
                         uri = peer.withPath(Uri.Path("/blocks"))
                     )
                 )
-                .flatMap(Unmarshal(_).to[BlockChain])
+                .flatMap(Unmarshal(_).to[Blockchain])
 
         // longest valid chain is the simplest resolution
         Source(state.peers)
@@ -136,7 +136,7 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
             )
             .runForeach(replyToSelf ! Message.SetBlocks(_))
 
-    def newChain(state: State, newChain: BlockChain): State =
+    def newChain(state: State, newChain: Blockchain): State =
         newChain
             .lastOption
             .filterNot(state.chain.lastOption.contains(_)) // skip broadcast if it's the same
@@ -174,7 +174,7 @@ class BlockChainActor private (context: ActorContext[Message]) extends JsonSuppo
 
         state.copy(chain = newChain, mineInProgress = mineInProgress)
 
-    def spawnMiner(chain: BlockChain, data: Data): () => Unit =
+    def spawnMiner(chain: Blockchain, data: Data): () => Unit =
         val cancel = Promise[Unit]
         // TODO: use a dedicated dispatcher or execution context
         Future {

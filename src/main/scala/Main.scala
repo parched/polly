@@ -16,7 +16,7 @@ object Main extends JsonSupport:
     def main(args: Array[String]): Unit =
         val port = args.lift(0).map(_.toInt).getOrElse(8080)
 
-        implicit val system = ActorSystem(BlockChainActor(), "blockchain")
+        implicit val system = ActorSystem(BlockchainActor(), "blockchain")
         // needed for the future flatMap/onComplete in the end
         implicit val executionContext = system.executionContext
 
@@ -26,7 +26,7 @@ object Main extends JsonSupport:
 
         val route = concat(
             (path("blocks") & get) {
-                complete(actor.ask[BlockChain](Message.GetBlocks(_)).map(_.toJson)) // TODO: what import is needed to avoid toJson?
+                complete(actor.ask[Blockchain](Message.GetBlocks(_)).map(_.toJson)) // TODO: what import is needed to avoid toJson?
             },
             (path("data") & post & entity(as[ByteString])) { data =>
                 actor ! Message.CreateBlock(data.toList)

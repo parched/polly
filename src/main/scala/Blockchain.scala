@@ -32,9 +32,9 @@ case class Block(prevHash: Hash, data: Data, hashModifier: Int):
             :+ (hashModifier >> 24).toByte
         )
 
-type BlockChain = List[Block]
+type Blockchain = List[Block]
 
-extension (chain: BlockChain)
+extension (chain: Blockchain)
     def isValid: Boolean =
         chain.headOption.map(_.prevHash == List.empty).getOrElse(true) &&
         chain.forall(_.prevHash.isValidBlockHash) && lastHash.isValidBlockHash &&
