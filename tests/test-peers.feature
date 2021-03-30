@@ -2,7 +2,7 @@ Feature: adding and notifying peers.
 
 Background:
     * def testNodeUrl =  'http://localhost:7000'
-    * def mockUrl = 'http://localhost:' + karate.start('mocks/peer.feature').port
+    * def mockUrl = 'http://localhost:' + karate.start('mock-peer.feature').port
     * url testNodeUrl
     * def someChainWith2ValidBlocks =
     """

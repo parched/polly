@@ -8,5 +8,5 @@ programs_to_test=("java -jar $root/target/scala-3.0.0-RC1/polly-assembly-0.1.0.j
 for program in "${programs_to_test[@]}"
 do
     echo TESTING: $program
-    karate tests/*.feature --configdir=tests --env="$program" || exit 1
+    karate tests/test-*.feature --configdir=tests --env="$program" || exit 1
 done
