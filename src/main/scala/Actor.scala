@@ -14,7 +14,7 @@ import spray.json.*
 import scala.util.{ Try, Failure, Success }
 import scala.concurrent.{ ExecutionContext, Future, Promise }
 
-enum Message:
+enum Command:
     case CreateBlock(data: Data)
     case GetBlocks(replyTo: ActorRef[Blockchain])
     case InsertBlock(index: Int, block: Block)
@@ -47,7 +47,7 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
                 Block(fromBase64(prevHash), fromBase64(data), modifier.toInt)
             case _ => throw DeserializationException("Block expected")
 
-    implicit val insertBlockFormat: RootJsonFormat[Message.InsertBlock] = jsonFormat2(Message.InsertBlock.apply)
+    implicit val insertBlockFormat: RootJsonFormat[Command.InsertBlock] = jsonFormat2(Command.InsertBlock.apply)
 
 object BlockchainActor:
     case class State(
@@ -57,19 +57,20 @@ object BlockchainActor:
         mineInProgress: Option[() => Unit]
     )
 
-    def apply() = Behaviors.setup[Message] { context =>
+    def apply() = Behaviors.setup[Command] { context =>
         new BlockchainActor(context).next(State(Nil, Set.empty, Set.empty, None))
     }
 
-class BlockchainActor private (context: ActorContext[Message]) extends JsonSupport:
+class BlockchainActor private (context: ActorContext[Command]) extends JsonSupport:
     import BlockchainActor.*
+    import Command.*
 
     implicit val system: ActorSystem[Nothing] = context.system
     implicit val systemEc: ExecutionContext = system.executionContext
-    val replyToSelf: ActorRef[Message] = context.self
+    val replyToSelf: ActorRef[Command] = context.self
 
-    def next(state: State): Behaviors.Receive[Message] = Behaviors.receiveMessage {
-        case Message.CreateBlock(data) =>
+    def next(state: State): Behaviors.Receive[Command] = Behaviors.receiveMessage {
+        case CreateBlock(data) =>
             if state.ourData.contains(data) then
                 context.log.info(s"Ignoring duplicate data")
                 Behaviors.same
@@ -81,11 +82,11 @@ class BlockchainActor private (context: ActorContext[Message]) extends JsonSuppo
                 }
                 next(state.copy(ourData = state.ourData + data, mineInProgress = Some(mineInProgress)))
 
-        case Message.GetBlocks(replyTo) =>
+        case GetBlocks(replyTo) =>
             replyTo ! state.chain
             Behaviors.same
 
-        case Message.InsertBlock(index, block) =>
+        case InsertBlock(index, block) =>
             if index < state.chain.length then
                 context.log.info(s"Ignoring too old block")
                 Behaviors.same
@@ -104,11 +105,11 @@ class BlockchainActor private (context: ActorContext[Message]) extends JsonSuppo
                 context.log.info(s"Block inserted")
                 next(newChain(state, state.chain :+ block))
 
-        case Message.AddPeer(peer) =>
+        case AddPeer(peer) =>
             context.log.info(s"Peer added: $peer")
             next(state.copy(peers = state.peers + peer))
 
-        case Message.SetBlocks(blocks) =>
+        case SetBlocks(blocks) =>
             context.log.info(s"Blockchain reset")
             next(newChain(state, blocks))
     }
@@ -134,13 +135,13 @@ class BlockchainActor private (context: ActorContext[Message]) extends JsonSuppo
             .fold(state.chain)((currentLongest, next) =>
                 if next.length > currentLongest.length && next.isValid then next else currentLongest
             )
-            .runForeach(replyToSelf ! Message.SetBlocks(_))
+            .runForeach(replyToSelf ! SetBlocks(_))
 
     def newChain(state: State, newChain: Blockchain): State =
         newChain
             .lastOption
             .filterNot(state.chain.lastOption.contains(_)) // skip broadcast if it's the same
-            .map(Message.InsertBlock(newChain.length - 1, _).toJson.toString)
+            .map(InsertBlock(newChain.length - 1, _).toJson.toString)
             .foreach { block =>
                 context.log.info(s"New last block: $block")
 
@@ -180,6 +181,6 @@ class BlockchainActor private (context: ActorContext[Message]) extends JsonSuppo
         Future {
             Block
                 .mine(chain.lastHash, data, () => cancel.isCompleted)
-                .foreach(replyToSelf ! Message.InsertBlock(chain.length, _))
+                .foreach(replyToSelf ! InsertBlock(chain.length, _))
         }
         () => cancel.success(())

@@ -22,23 +22,25 @@ object Main extends JsonSupport:
 
         implicit val timeout: Timeout = 5.seconds
 
-        val actor: ActorRef[Message] = system
+        val actor: ActorRef[Command] = system
+
+        import Command.*
 
         val route = concat(
             (path("blocks") & get) {
-                complete(actor.ask[Blockchain](Message.GetBlocks(_)).map(_.toJson)) // TODO: what import is needed to avoid toJson?
+                complete(actor.ask[Blockchain](GetBlocks(_)).map(_.toJson)) // TODO: what import is needed to avoid toJson?
             },
             (path("data") & post & entity(as[ByteString])) { data =>
-                actor ! Message.CreateBlock(data.toList)
+                actor ! CreateBlock(data.toList)
                 complete("creating block")
             }, // TODO: how about blocks/i for get and post
-            (path("block") & put & entity(as[Message.InsertBlock])) { block =>
+            (path("block") & put & entity(as[InsertBlock])) { block =>
                 actor ! block
                 complete("block inserted")
             },
             (path("peers") & put & entity(as[String])) { uri =>
                 // TODO: validate as much a possible
-                actor ! Message.AddPeer(Uri(uri).withoutFragment) // discard other bits
+                actor ! AddPeer(Uri(uri).withoutFragment) // discard other bits
                 complete("peer inserted")
             }
         )
