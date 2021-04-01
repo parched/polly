@@ -7,7 +7,7 @@ lazy val root = project
     name := "polly",
     version := "0.1.0",
     scalaVersion := "3.0.0-RC1",
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
+
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
       "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
@@ -15,5 +15,9 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion
     ).map(_.withDottyCompat(scalaVersion.value)),
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
+
+    libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.5",
+    libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.5" % "test",
+
     useScala3doc := true
   )

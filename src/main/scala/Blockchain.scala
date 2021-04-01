@@ -36,8 +36,11 @@ type Blockchain = List[Block]
 
 extension (chain: Blockchain)
     def isValid: Boolean =
+        // first prevHash must be empty
         chain.headOption.map(_.prevHash == List.empty).getOrElse(true) &&
+        // all hashes must be valid
         chain.forall(_.prevHash.isValidBlockHash) && lastHash.isValidBlockHash &&
-        !chain.view.sliding(2).exists(pair => pair.head.hash != pair.last.prevHash)
+        // all prevHashes must match
+        (chain.length < 2 || !chain.sliding(2).exists(pair => pair.head.hash != pair.last.prevHash))
 
     def lastHash: Hash = chain.lastOption.map(_.hash).getOrElse(List.empty)
