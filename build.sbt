@@ -13,11 +13,9 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
       "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
       "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion
-    ).map(_.withDottyCompat(scalaVersion.value)),
+    ).map(_.cross(CrossVersion.for3Use2_13)),
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
 
     libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.5",
     libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.5" % "test",
-
-    useScala3doc := true
   )
