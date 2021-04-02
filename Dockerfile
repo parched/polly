@@ -1,12 +1,15 @@
 FROM ubuntu:20.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
   curl \
   git \
+  libz-dev \
   openjdk-11-jdk-headless \
   unzip \
   xz-utils \
   zip \
+  zlib1g-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # Make the default match non-root users
@@ -27,3 +30,14 @@ RUN cd /opt \
   && mv karate* karate \
   && sed -i -e 's,java -cp.*,java -cp "$(dirname "$0")/karate.jar":. com.intuit.karate.Main "$@",' karate/karate
 ENV PATH ${PATH}:/opt/karate
+
+ARG GRAALVM_VERSION=21.0.0.2
+ENV PATH ${PATH}:/opt/graalvm/bin
+ENV GRAALVM_HOME /opt/graalvm
+RUN cd /opt \
+  && curl -fLO https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/graalvm-ce-java11-linux-amd64-${GRAALVM_VERSION}.tar.gz \
+  && tar -xf graalvm*.tar.gz \
+  && rm graalvm*.tar.gz \
+  && mv graalvm* graalvm \
+  && gu install native-image
+ENV NATIVE_IMAGE_INSTALLED true
