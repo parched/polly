@@ -7,7 +7,7 @@ lazy val root = project
   .settings(
     name := "polly",
     version := "0.1.0",
-    scalaVersion := "3.0.0-RC1",
+    scalaVersion := "3.0.0-RC2",
     Compile / mainClass := Some("Main"),
 
     libraryDependencies ++= Seq(
@@ -18,6 +18,5 @@ lazy val root = project
     ).map(_.cross(CrossVersion.for3Use2_13)),
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
 
-    libraryDependencies += "org.scalactic" %% "scalactic" % "3.2.5",
-    libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.5" % "test",
+    libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.7" % "test",
   )
