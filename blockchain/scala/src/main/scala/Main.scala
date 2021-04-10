@@ -45,10 +45,7 @@ object Main extends JsonSupport:
             }
         )
 
-        val bindingFuture = Http().newServerAt("localhost", port).bind(route)
-
-        println(s"Server online at http://localhost:${port}/\nPress RETURN to stop...")
-        StdIn.readLine() // let it run until user presses return
-        bindingFuture
-            .flatMap(_.unbind()) // trigger unbinding from the port
-            .onComplete(_ => system.terminate()) // and shutdown when done
+        Http()
+            .newServerAt("localhost", port)
+            .bind(route)
+            .onComplete(_ => println(s"Server online at http://localhost:${port}/"))
