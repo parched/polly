@@ -16,7 +16,8 @@ lazy val root = project
       "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
       "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion
     ).map(_.cross(CrossVersion.for3Use2_13)),
-    libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3",
+
+    libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "1.7.28",
 
     libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.7" % "test",
   )
