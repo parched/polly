@@ -18,32 +18,21 @@ NATIVE_IMAGE_CONFIG = $(NATIVE_IMAGE_CONFIG_DIR)/reflect-config.json
 
 # Log what is accessed by reflection by
 # running the jar with native-image-agent
-# waiting for it to be ready
-# sending it a request (to make sure all of the http functionality is probed)
-# then kill it
-# TODO: replace the 'sleep 2' which waits for the broadcast with netcat -l
-# TODO: put curl in the loop to avoid relying on specific output 
+# we need it to handle an incoming TCP request and an outgoing TCP request
+# so we send it some data to mine and wait for it to broadcast the new block
 $(NATIVE_IMAGE_CONFIG): $(POLLY_JAR) Makefile
 	rm -rf $(NATIVE_IMAGE_CONFIG_DIR)
 	mkdir -p $(NATIVE_IMAGE_CONFIG_DIR)
-	trap 'pollypid=`cat target/polly-pid` && kill $$pollypid && wait $$pollypid' INT TERM EXIT; \
-	{ \
-		"$(GRAALVM_HOME)"/bin/java \
-		-agentlib:native-image-agent=config-output-dir=$(NATIVE_IMAGE_CONFIG_DIR) \
-		-jar $(POLLY_JAR) & \
-		echo $$! > target/polly-pid; \
-	} \
-	2>&1 | \
-	{ \
-		set -e; \
-		while read line && ! { echo $$line | grep "Server online" > /dev/null; }; do echo $$line; done; \
-		echo $$line; \
-		curl -X PUT -d http://localhost:9999 http://localhost:8080/peers; \
-		curl -X POST -d abc http://localhost:8080/data; \
-		while read line && ! { echo $$line | grep "Block inserted" > /dev/null; }; do echo $$line; done; \
-		echo $$line; \
-		sleep 2; \
-	} || { sleep 5 && rm -rf $(NATIVE_IMAGE_CONFIG_DIR) && false; }
+	"$(GRAALVM_HOME)"/bin/java \
+	-agentlib:native-image-agent=config-output-dir=$(NATIVE_IMAGE_CONFIG_DIR) \
+	-jar $(POLLY_JAR) 8080 & \
+	polly_pid=$$!; \
+	trap 'kill $$polly_pid && wait $$polly_pid' INT TERM EXIT; \
+	set -e; \
+	while ! curl -X PUT -d http://localhost:9999 http://localhost:8080/peers; \
+	do sleep 1; done; \
+	curl -X POST -d abc http://localhost:8080/data; \
+	printf 'HTTP/1.1 200 OK\n\n[]' | netcat -l 9999
 
 $(POLLY_NATIVE): $(POLLY_JAR) $(NATIVE_IMAGE_CONFIG)
 	native-image \
