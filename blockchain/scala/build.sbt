@@ -3,12 +3,11 @@ val AkkaHttpVersion = "10.2.4"
 
 lazy val root = project
   .in(file("."))
-  .enablePlugins(NativeImagePlugin)
   .settings(
     name := "polly",
     version := "0.1.0",
+
     scalaVersion := "3.0.0-RC2",
-    Compile / mainClass := Some("Main"),
 
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
