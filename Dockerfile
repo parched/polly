@@ -42,3 +42,11 @@ RUN cd /opt \
   && mv graalvm* graalvm \
   && gu install native-image
 ENV NATIVE_IMAGE_INSTALLED true
+
+ARG RUST_VERSION=1.51.0
+RUN curl -fLO https://static.rust-lang.org/dist/rust-${RUST_VERSION}-x86_64-unknown-linux-gnu.tar.gz \
+  && tar -xf rust*.tar.gz \
+  && rm rust*.tar.gz \
+  && rust*/install.sh \
+  && rm -rf rust*
+  
