@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libz-dev \
   netcat \
   openjdk-11-jdk-headless \
+  pkg-config \
   unzip \
   xz-utils \
   zip \
