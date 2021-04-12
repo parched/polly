@@ -3,6 +3,23 @@ use std::convert::TryInto;
 
 use ring::signature;
 
+#[derive(Debug)]
+pub struct Balance {
+    pub amount: u64,
+    pub last_nonce: u32,
+}
+
+impl Balance {
+    pub fn new(initial_amount: u64) -> Self {
+        Balance {
+            amount: initial_amount,
+            last_nonce: 0,
+        }
+    }
+}
+
+pub type Balances = HashMap<Vec<u8>, Balance>;
+
 /// A transfer of polly coin from one address to another
 pub struct Transaction {
     bytes: [u8; Self::TRANSACTION_SIZE],
@@ -21,15 +38,17 @@ impl Transaction {
     const SIGNATURE_OFFSET: usize = Self::NONCE_SIZE + Self::NONCE_SIZE;
     const TRANSACTION_SIZE: usize = Self::SIGNATURE_OFFSET + Self::SIGNATURE_SIZE;
 
+    /// Ed25519 public key that the amount is sent from
     pub fn from(&self) -> &[u8] {
         &self.bytes[Self::FROM_OFFSET..Self::TO_OFFSET]
     }
 
+    /// Ed25519 public key that the amount is sent to
     pub fn to(&self) -> &[u8] {
         &self.bytes[Self::TO_OFFSET..Self::AMOUNT_OFFSET]
     }
 
-    /// Must be less than or equal to
+    /// Must be less than or equal to balance amount of this from address
     pub fn amount(&self) -> u64 {
         u64::from_le_bytes(
             self.bytes[Self::AMOUNT_OFFSET..Self::NONCE_OFFSET]
@@ -38,7 +57,7 @@ impl Transaction {
         )
     }
 
-    /// Must be greater than the last nonce used by this from
+    /// Must be greater than the last nonce used by this from address
     pub fn nonce(&self) -> u32 {
         u32::from_le_bytes(
             self.bytes[Self::NONCE_OFFSET..Self::SIGNATURE_OFFSET]
@@ -47,20 +66,41 @@ impl Transaction {
         )
     }
 
-    /// Must be the signature using from public key of the above fields concatenated
+    /// Ed25519 signature of the content using the from address
     pub fn signature(&self) -> &[u8] {
         &self.bytes[Self::SIGNATURE_OFFSET..Self::TRANSACTION_SIZE]
     }
+
+    /// The transaction without the signature
     pub fn content(&self) -> &[u8] {
         &self.bytes[..Self::SIGNATURE_OFFSET]
     }
 
-    pub fn verify_signature(&self) -> bool {
+    pub fn has_valid_signature(&self) -> bool {
         let public_key_bytes = &self.from();
         let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key_bytes);
         public_key
             .verify(&self.content(), &self.signature())
             .is_ok()
+    }
+
+    pub fn add_to_balances_if_valid(&self, balances: &mut Balances) {
+        let from_balance_if_valid = balances.get_mut(self.from()).filter(|from_balance| {
+            self.amount() <= from_balance.amount
+                && self.nonce() > from_balance.last_nonce
+                && self.has_valid_signature()
+        });
+
+        if let Some(from_balance) = from_balance_if_valid {
+            from_balance.amount -= self.amount();
+            from_balance.last_nonce = self.nonce();
+            match balances.get_mut(self.to()) {
+                Some(to_balance) => to_balance.amount += self.amount(),
+                None => {
+                    balances.insert(self.to().to_vec(), Balance::new(self.amount()));
+                }
+            }
+        }
     }
 
     /// Parses a blob of data into a polly coin transaction
@@ -73,6 +113,10 @@ impl Transaction {
     }
 }
 
-pub fn get_balances(transactions: impl IntoIterator<Item = Transaction>) -> HashMap<Vec<u8>, u64> {
-    HashMap::new()
+pub fn get_balances(transactions: impl IntoIterator<Item = Transaction>) -> Balances {
+    let mut balances = Balances::new(); // TODO: someone must start with non-zero balance
+    transactions
+        .into_iter()
+        .for_each(|transaction| transaction.add_to_balances_if_valid(&mut balances));
+    balances
 }
