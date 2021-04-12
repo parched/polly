@@ -1,6 +1,9 @@
 mod blockchain;
 mod transaction;
 
+use blockchain::Block;
+use transaction::Transaction;
+
 use clap::{AppSettings, Clap};
 
 /// Wallet application for polly coin on a polly blockchain
@@ -38,10 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         SubCommand::Print(_) => {
             let transactions = reqwest::get(opts.server + "/blocks")
                 .await?
-                .json::<Vec<blockchain::Block>>()
+                .json::<Vec<Block>>()
                 .await?
                 .iter()
-                .filter_map(|block| transaction::parse(&block.data))
+                .filter_map(|block| Transaction::parse(&block.data))
                 .collect::<Vec<_>>();
 
             let balances = transaction::get_balances(transactions);
