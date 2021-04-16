@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-use ring::signature;
+use ring::signature::{self, KeyPair};
+
+use anyhow::{anyhow, Context, Result};
 
 #[derive(Debug)]
 pub struct Balance {
@@ -22,7 +24,7 @@ pub type Balances = HashMap<Vec<u8>, Balance>;
 
 /// A transfer of polly coin from one address to another
 pub struct Transaction {
-    bytes: [u8; Self::TRANSACTION_SIZE],
+    pub bytes: [u8; Self::TRANSACTION_SIZE],
 }
 
 impl Transaction {
@@ -37,6 +39,51 @@ impl Transaction {
     const NONCE_OFFSET: usize = Self::AMOUNT_OFFSET + Self::AMOUNT_SIZE;
     const SIGNATURE_OFFSET: usize = Self::NONCE_SIZE + Self::NONCE_SIZE;
     const TRANSACTION_SIZE: usize = Self::SIGNATURE_OFFSET + Self::SIGNATURE_SIZE;
+
+    pub fn new(
+        from: &signature::Ed25519KeyPair,
+        to: &[u8],
+        amount: u64,
+        balances: Balances,
+    ) -> Result<Self> {
+        let to: &[u8; Self::ADDRESS_SIZE] = to
+            .try_into()
+            .context("Destination address length incorrect")?;
+        let address = from.public_key().as_ref();
+        let nonce = balances
+            .get(address)
+            .ok_or_else(|| anyhow!("Unknown sender (balance zero)"))
+            .and_then(|b| {
+                if b.amount >= amount {
+                    Ok(b.last_nonce + 1)
+                } else {
+                    Err(anyhow!("Insuffiecient balance: {}", b.amount))
+                }
+            })?;
+
+        Ok(Self::new_unchecked(from, to, amount, nonce))
+    }
+
+    fn new_unchecked(
+        from: &signature::Ed25519KeyPair,
+        to: &[u8; Self::ADDRESS_SIZE],
+        amount: u64,
+        nonce: u32,
+    ) -> Self {
+        let address = from.public_key().as_ref();
+
+        let mut bytes = [0u8; Self::TRANSACTION_SIZE];
+        bytes[Self::FROM_OFFSET..Self::TO_OFFSET].clone_from_slice(address);
+        bytes[Self::TO_OFFSET..Self::AMOUNT_OFFSET].clone_from_slice(to);
+        bytes[Self::AMOUNT_OFFSET..Self::NONCE_OFFSET].clone_from_slice(&amount.to_le_bytes());
+        bytes[Self::NONCE_OFFSET..Self::SIGNATURE_OFFSET].clone_from_slice(&nonce.to_le_bytes());
+
+        let sig = from.sign(&bytes[..Self::SIGNATURE_OFFSET]);
+
+        bytes[Self::SIGNATURE_OFFSET..Self::TRANSACTION_SIZE].clone_from_slice(sig.as_ref());
+
+        Self { bytes: bytes }
+    }
 
     /// Ed25519 public key that the amount is sent from
     pub fn from(&self) -> &[u8] {
@@ -77,7 +124,7 @@ impl Transaction {
     }
 
     pub fn has_valid_signature(&self) -> bool {
-        let public_key_bytes = &self.from();
+        let public_key_bytes = self.from();
         let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key_bytes);
         public_key
             .verify(&self.content(), &self.signature())
