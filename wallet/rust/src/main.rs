@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
 
             let balances = get_balances(&opts.server).await?;
 
-            let amount = balances.get(address).map(|b| b.amount).unwrap_or(0u64);
+            let amount = balances.get(address);
             println!("Balance:\n{:?}", amount);
             Ok(())
         }
@@ -88,10 +88,9 @@ async fn main() -> Result<()> {
                 &key_pair,
                 &to,
                 send_opts.amount,
-                get_balances(&opts.server).await?,
+                &mut get_balances(&opts.server).await?,
             )?;
 
-            println!("Sending 5 polly coins to bob");
             let client = reqwest::Client::new();
             let res = client
                 .post(opts.server + "/data")

@@ -20,7 +20,60 @@ impl Balance {
     }
 }
 
-pub type Balances = HashMap<Vec<u8>, Balance>;
+pub struct Balances(HashMap<Vec<u8>, Balance>);
+
+impl Balances {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn get(&self, address: &[u8]) -> u64 {
+        self.0.get(address).map(|b| b.amount).unwrap_or(0u64)
+    }
+
+    pub fn transfer(
+        &mut self,
+        from: &[u8],
+        to: &[u8],
+        amount: u64,
+        nonce: Option<u32>,
+    ) -> Result<u32> {
+        // The first sender starts with all the coins
+        if self.0.is_empty() {
+            self.0.insert(from.to_vec(), Balance::new(u64::MAX));
+        }
+
+        let from_balance = self
+            .0
+            .get_mut(from)
+            .ok_or_else(|| anyhow!("Unknown sender (balance zero)"))
+            .and_then(|b| {
+                if b.amount < amount {
+                    Err(anyhow!("Insufficient balance: {}", b.amount))
+                } else {
+                    match nonce {
+                        Some(nonce) if nonce <= b.last_nonce => {
+                            Err(anyhow!("Invalid nonce: {}", nonce))
+                        }
+                        _ => Ok(b),
+                    }
+                }
+            })?;
+
+        let new_nonce = nonce.unwrap_or_else(|| from_balance.last_nonce + 1);
+        from_balance.amount -= amount;
+        from_balance.last_nonce = new_nonce;
+
+        match self.0.get_mut(to) {
+            Some(to_balance) => to_balance.amount += amount,
+            None => {
+                self.0.insert(to.to_vec(), Balance::new(amount));
+            }
+        }
+
+        Ok(new_nonce)
+    }
+}
 
 /// A transfer of polly coin from one address to another
 pub struct Transaction {
@@ -37,29 +90,20 @@ impl Transaction {
     const TO_OFFSET: usize = Self::FROM_OFFSET + Self::ADDRESS_SIZE;
     const AMOUNT_OFFSET: usize = Self::TO_OFFSET + Self::ADDRESS_SIZE;
     const NONCE_OFFSET: usize = Self::AMOUNT_OFFSET + Self::AMOUNT_SIZE;
-    const SIGNATURE_OFFSET: usize = Self::NONCE_SIZE + Self::NONCE_SIZE;
+    const SIGNATURE_OFFSET: usize = Self::NONCE_OFFSET + Self::NONCE_SIZE;
     const TRANSACTION_SIZE: usize = Self::SIGNATURE_OFFSET + Self::SIGNATURE_SIZE;
 
     pub fn new(
         from: &signature::Ed25519KeyPair,
         to: &[u8],
         amount: u64,
-        balances: Balances,
+        balances: &mut Balances,
     ) -> Result<Self> {
         let to: &[u8; Self::ADDRESS_SIZE] = to
             .try_into()
             .context("Destination address length incorrect")?;
         let address = from.public_key().as_ref();
-        let nonce = balances
-            .get(address)
-            .ok_or_else(|| anyhow!("Unknown sender (balance zero)"))
-            .and_then(|b| {
-                if b.amount >= amount {
-                    Ok(b.last_nonce + 1)
-                } else {
-                    Err(anyhow!("Insuffiecient balance: {}", b.amount))
-                }
-            })?;
+        let nonce = balances.transfer(address, to, amount, None)?;
 
         Ok(Self::new_unchecked(from, to, amount, nonce))
     }
@@ -131,25 +175,6 @@ impl Transaction {
             .is_ok()
     }
 
-    pub fn add_to_balances_if_valid(&self, balances: &mut Balances) {
-        let from_balance_if_valid = balances.get_mut(self.from()).filter(|from_balance| {
-            self.amount() <= from_balance.amount
-                && self.nonce() > from_balance.last_nonce
-                && self.has_valid_signature()
-        });
-
-        if let Some(from_balance) = from_balance_if_valid {
-            from_balance.amount -= self.amount();
-            from_balance.last_nonce = self.nonce();
-            match balances.get_mut(self.to()) {
-                Some(to_balance) => to_balance.amount += self.amount(),
-                None => {
-                    balances.insert(self.to().to_vec(), Balance::new(self.amount()));
-                }
-            }
-        }
-    }
-
     /// Parses a blob of data into a polly coin transaction
     ///
     /// Data on the polly blockchain is arbitrary, so not all will be transactions
@@ -161,9 +186,13 @@ impl Transaction {
 }
 
 pub fn get_balances(transactions: impl IntoIterator<Item = Transaction>) -> Balances {
-    let mut balances = Balances::new(); // TODO: someone must start with non-zero balance
+    let mut balances = Balances::new();
     transactions
         .into_iter()
-        .for_each(|transaction| transaction.add_to_balances_if_valid(&mut balances));
+        .filter(|t| t.has_valid_signature())
+        .for_each(|t| {
+            // Invalid transfers are ignored
+            let _ = balances.transfer(t.from(), t.to(), t.amount(), Some(t.nonce()));
+        });
     balances
 }
