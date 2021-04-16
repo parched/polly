@@ -10,5 +10,5 @@ pub struct Block {
     pub prev_hash: Vec<u8>,
     #[serde(with = "Base64Standard")]
     pub data: Vec<u8>,
-    pub hash_modifier: u32,
+    pub modifier: u32,
 }
