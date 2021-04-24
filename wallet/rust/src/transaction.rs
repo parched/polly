@@ -126,7 +126,7 @@ impl Transaction {
 
         bytes[Self::SIGNATURE_OFFSET..Self::TRANSACTION_SIZE].clone_from_slice(sig.as_ref());
 
-        Self { bytes: bytes }
+        Self { bytes }
     }
 
     /// Ed25519 public key that the amount is sent from
