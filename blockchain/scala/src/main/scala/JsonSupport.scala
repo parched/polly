@@ -22,9 +22,19 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
                 "modifier" -> JsNumber(b.hashModifier)
             )
 
-        def read(value: JsValue) = value.asJsObject.getFields("prev_hash", "data", "modifier") match
-            case Seq(JsString(prevHash), JsString(data), JsNumber(modifier)) =>
-                Block(fromBase64(prevHash), fromBase64(data), modifier.toInt)
-            case _ => throw DeserializationException("Block expected")
+        def read(value: JsValue) =
+            value.asJsObject.getFields("prev_hash", "data", "modifier") match
+                case Seq(
+                        JsString(prevHash),
+                        JsString(data),
+                        JsNumber(modifier)
+                    ) =>
+                    Block(
+                        fromBase64(prevHash),
+                        fromBase64(data),
+                        modifier.toInt
+                    )
+                case _ => throw DeserializationException("Block expected")
 
-    implicit val insertBlockFormat: RootJsonFormat[Command.InsertBlock] = jsonFormat2(Command.InsertBlock.apply)
+    implicit val insertBlockFormat: RootJsonFormat[Command.InsertBlock] =
+        jsonFormat2(Command.InsertBlock.apply)

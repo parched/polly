@@ -1,13 +1,13 @@
 import akka.actor.typed.scaladsl.AskPattern.*
-import akka.actor.typed.{ ActorRef, ActorSystem }
+import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.*
 import akka.http.scaladsl.server.Directives.*
-import akka.util.{ ByteString, Timeout }
+import akka.util.{ByteString, Timeout}
 
 import scala.concurrent.duration.*
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 import scala.io.StdIn
 
 import spray.json.enrichAny
@@ -28,7 +28,10 @@ object Main extends JsonSupport:
 
         val route = concat(
             (path("blocks") & get) {
-                complete(actor.ask[Blockchain](GetBlocks(_)).map(_.toJson)) // TODO: what import is needed to avoid toJson?
+                complete(
+                    // TODO: what import is needed to avoid toJson?
+                    actor.ask[Blockchain](GetBlocks(_)).map(_.toJson)
+                )
             },
             (path("data") & post & entity(as[ByteString])) { data =>
                 actor ! CreateBlock(data.toList)
@@ -48,4 +51,6 @@ object Main extends JsonSupport:
         Http()
             .newServerAt("localhost", port)
             .bind(route)
-            .onComplete(_ => println(s"Server online at http://localhost:${port}/"))
+            .onComplete(_ =>
+                println(s"Server online at http://localhost:${port}/")
+            )
