@@ -11,7 +11,8 @@ use ring::{
 
 use clap::{AppSettings, Clap};
 
-use anyhow::{anyhow, Context};
+use anyhow::{bail, Context, Error};
+use fehler::throws;
 
 /// Wallet application for polly coin on a polly blockchain
 #[derive(Clap)]
@@ -58,10 +59,9 @@ struct Send {
 #[derive(Clap)]
 struct GenKey {}
 
-type Result<T> = std::result::Result<T, anyhow::Error>;
-
+#[throws]
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     let opts: Opts = Opts::parse();
 
     match opts.subcmd {
@@ -73,13 +73,11 @@ async fn main() -> Result<()> {
 
             let amount = balances.get(address);
             println!("Balance:\n{:?}", amount);
-            Ok(())
         }
         SubCommand::PrintAddress(_) => {
             let key_pair = get_key_pair(&opts.key_file)?;
             let address = base64::encode(key_pair.public_key());
             println!("Public address:\n{}", address);
-            Ok(())
         }
         SubCommand::Send(send_opts) => {
             let to = base64::decode(send_opts.to)?;
@@ -97,13 +95,8 @@ async fn main() -> Result<()> {
                 .body(transaction.bytes.to_vec())
                 .send()
                 .await?;
-            if res.status().is_success() {
-                Ok(())
-            } else {
-                Err(anyhow!(
-                    "Failed to send transaction to server: {}",
-                    res.status()
-                ))
+            if !res.status().is_success() {
+                bail!("Failed to send transaction to server: {}", res.status());
             }
         }
         SubCommand::GenKey(_) => {
@@ -112,18 +105,19 @@ async fn main() -> Result<()> {
             let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(&rng)?;
             std::fs::write(&opts.key_file, pkcs8_bytes)
                 .with_context(|| format!("Failed to write key-file '{}'", &opts.key_file))?;
-            Ok(())
         }
     }
 }
 
-fn get_key_pair(key_file: &str) -> Result<signature::Ed25519KeyPair> {
+#[throws]
+fn get_key_pair(key_file: &str) -> signature::Ed25519KeyPair {
     let pkcs8_bytes = std::fs::read(key_file)
         .with_context(|| format!("Failed to read key-file '{}'", key_file))?;
-    Ok(signature::Ed25519KeyPair::from_pkcs8(&pkcs8_bytes)?)
+    signature::Ed25519KeyPair::from_pkcs8(&pkcs8_bytes)?
 }
 
-async fn get_balances(server: &str) -> Result<transaction::Balances> {
+#[throws]
+async fn get_balances(server: &str) -> transaction::Balances {
     println!("Connecting to server at: {}", server);
     let transactions = reqwest::get(server.to_owned() + "/blocks")
         .await?
@@ -133,5 +127,5 @@ async fn get_balances(server: &str) -> Result<transaction::Balances> {
         .filter_map(|block| Transaction::parse(&block.data))
         .collect::<Vec<_>>();
 
-    Ok(transaction::get_balances(transactions))
+    transaction::get_balances(transactions)
 }

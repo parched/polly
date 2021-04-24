@@ -3,7 +3,8 @@ use std::convert::TryInto;
 
 use ring::signature::{self, KeyPair};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Error};
+use fehler::throws;
 
 #[derive(Debug)]
 pub struct Balance {
@@ -31,13 +32,8 @@ impl Balances {
         self.0.get(address).map(|b| b.amount).unwrap_or(0u64)
     }
 
-    pub fn transfer(
-        &mut self,
-        from: &[u8],
-        to: &[u8],
-        amount: u64,
-        nonce: Option<u32>,
-    ) -> Result<u32> {
+    #[throws]
+    pub fn transfer(&mut self, from: &[u8], to: &[u8], amount: u64, nonce: Option<u32>) -> u32 {
         // The first sender starts with all the coins
         if self.0.is_empty() {
             self.0.insert(from.to_vec(), Balance::new(u64::MAX));
@@ -49,15 +45,14 @@ impl Balances {
             .ok_or_else(|| anyhow!("Unknown sender (balance zero)"))
             .and_then(|b| {
                 if b.amount < amount {
-                    Err(anyhow!("Insufficient balance: {}", b.amount))
-                } else {
-                    match nonce {
-                        Some(nonce) if nonce <= b.last_nonce => {
-                            Err(anyhow!("Invalid nonce: {}", nonce))
-                        }
-                        _ => Ok(b),
+                    bail!("Insufficient balance: {}", b.amount);
+                }
+                if let Some(n) = nonce {
+                    if n <= b.last_nonce {
+                        bail!("Invalid nonce: {}", n)
                     }
                 }
+                Ok(b)
             })?;
 
         let new_nonce = nonce.unwrap_or_else(|| from_balance.last_nonce + 1);
@@ -71,7 +66,7 @@ impl Balances {
             }
         }
 
-        Ok(new_nonce)
+        new_nonce
     }
 }
 
@@ -93,19 +88,20 @@ impl Transaction {
     const SIGNATURE_OFFSET: usize = Self::NONCE_OFFSET + Self::NONCE_SIZE;
     const TRANSACTION_SIZE: usize = Self::SIGNATURE_OFFSET + Self::SIGNATURE_SIZE;
 
+    #[throws]
     pub fn new(
         from: &signature::Ed25519KeyPair,
         to: &[u8],
         amount: u64,
         balances: &mut Balances,
-    ) -> Result<Self> {
+    ) -> Self {
         let to: &[u8; Self::ADDRESS_SIZE] = to
             .try_into()
             .context("Destination address length incorrect")?;
         let address = from.public_key().as_ref();
         let nonce = balances.transfer(address, to, amount, None)?;
 
-        Ok(Self::new_unchecked(from, to, amount, nonce))
+        Self::new_unchecked(from, to, amount, nonce)
     }
 
     fn new_unchecked(
