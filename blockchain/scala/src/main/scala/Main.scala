@@ -4,6 +4,10 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.*
 import akka.http.scaladsl.server.Directives.*
+import akka.http.scaladsl.unmarshalling.Unmarshal
+
+import spray.json.enrichAny
+
 import akka.util.{ByteString, Timeout}
 
 import scala.concurrent.duration.*
@@ -11,6 +15,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.io.StdIn
 
 import spray.json.enrichAny
+
+import BlockchainActor.Command
 
 object Main extends JsonSupport:
     def main(args: Array[String]): Unit =
@@ -41,9 +47,39 @@ object Main extends JsonSupport:
                 actor ! block
                 complete("block inserted")
             },
-            (path("peers") & put & entity(as[String])) { uri =>
+            (path("peers") & put & entity(as[String])) { uriRaw =>
                 // TODO: validate as much a possible
-                actor ! AddPeer(Uri(uri).withoutFragment) // discard other bits
+                val peer = new BlockchainActor.Peer {
+                    val uri = Uri(uriRaw).withoutFragment // discard other bits
+
+                    override def notifyNewBlock(
+                        block: Command.InsertBlock
+                    ): Unit =
+                        Http()
+                            .singleRequest(
+                                HttpRequest(
+                                    method = HttpMethods.PUT,
+                                    uri = uri.withPath(Uri.Path("/block")),
+                                    entity = HttpEntity(
+                                        ContentTypes.`application/json`,
+                                        block.toJson.toString
+                                    )
+                                )
+                            )
+                            .map(_.discardEntityBytes())
+
+                    override def getBlocks(): Future[Blockchain] =
+                        Http()
+                            .singleRequest(
+                                HttpRequest(
+                                    method = HttpMethods.GET,
+                                    uri = uri.withPath(Uri.Path("/blocks"))
+                                )
+                            )
+                            .flatMap(Unmarshal(_).to[Blockchain])
+                }
+
+                actor ! AddPeer(peer)
                 complete("peer inserted")
             }
         )

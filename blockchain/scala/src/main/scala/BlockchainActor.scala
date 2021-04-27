@@ -4,20 +4,24 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.stream.*
 import akka.stream.scaladsl.*
 
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.*
-import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.unmarshalling.Unmarshal
-
-import spray.json.enrichAny
-
 import scala.util.{Try, Failure, Success}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 object BlockchainActor:
+    trait Peer:
+        def notifyNewBlock(block: Command.InsertBlock): Unit
+        def getBlocks(): Future[Blockchain]
+
+    enum Command:
+        case CreateBlock(data: Data)
+        case GetBlocks(replyTo: ActorRef[Blockchain])
+        case InsertBlock(index: Int, block: Block)
+        case AddPeer(peer: Peer)
+        case SetBlocks(blocks: Blockchain)
+
     case class State(
         chain: Blockchain,
-        peers: Set[Uri],
+        peers: Set[Peer],
         ourData: Set[Data],
         mineInProgress: Option[() => Unit]
     )
@@ -28,7 +32,7 @@ object BlockchainActor:
         )
     }
 
-class BlockchainActor private (context: ActorContext[Command])
+class BlockchainActor private (context: ActorContext[BlockchainActor.Command])
     extends JsonSupport:
     import BlockchainActor.*
     import Command.*
@@ -91,20 +95,10 @@ class BlockchainActor private (context: ActorContext[Command])
         }
 
     def resolve(state: State): Unit =
-        val getBlocks: Uri => Future[Blockchain] = peer =>
-            Http()
-                .singleRequest(
-                    HttpRequest(
-                        method = HttpMethods.GET,
-                        uri = peer.withPath(Uri.Path("/blocks"))
-                    )
-                )
-                .flatMap(Unmarshal(_).to[Blockchain])
-
         // longest valid chain is the simplest resolution
         Source(state.peers)
             // transform and ignore failures rather than failing the stream
-            .mapAsyncUnordered(4)(getBlocks(_).transform(Success(_)))
+            .mapAsyncUnordered(4)(_.getBlocks().transform(Success(_)))
             .collect { case Success(blocks) =>
                 blocks
             }
@@ -118,24 +112,10 @@ class BlockchainActor private (context: ActorContext[Command])
         newChain.lastOption
             // skip broadcast if it's the same
             .filterNot(state.chain.lastOption.contains(_))
-            .map(InsertBlock(newChain.length - 1, _).toJson.toString)
+            .map[InsertBlock](InsertBlock(newChain.length - 1, _))
             .foreach { block =>
                 context.log.info(s"New last block: $block")
-
-                state.peers.foreach(peer =>
-                    Http()
-                        .singleRequest(
-                            HttpRequest(
-                                method = HttpMethods.PUT,
-                                uri = peer.withPath(Uri.Path("/block")),
-                                entity = HttpEntity(
-                                    ContentTypes.`application/json`,
-                                    block
-                                )
-                            )
-                        )
-                        .map(_.discardEntityBytes())
-                )
+                state.peers.foreach(_.notifyNewBlock(block))
             }
 
         // cancel the mine in progress because it needs a new prevHash

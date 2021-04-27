@@ -36,5 +36,6 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
                     )
                 case _ => throw DeserializationException("Block expected")
 
-    implicit val insertBlockFormat: RootJsonFormat[Command.InsertBlock] =
-        jsonFormat2(Command.InsertBlock.apply)
+    implicit val insertBlockFormat
+        : RootJsonFormat[BlockchainActor.Command.InsertBlock] =
+        jsonFormat2(BlockchainActor.Command.InsertBlock.apply)
