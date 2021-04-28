@@ -3,7 +3,7 @@ import spray.json.*
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
 
-    implicit object BlockJsonFormat extends RootJsonFormat[Block]:
+    given RootJsonFormat[Block] with
         import java.util.Base64
 
         val base64encoder = Base64.getEncoder()
@@ -36,6 +36,5 @@ trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol:
                     )
                 case _ => throw DeserializationException("Block expected")
 
-    implicit val insertBlockFormat
-        : RootJsonFormat[BlockchainActor.Command.InsertBlock] =
-        jsonFormat2(BlockchainActor.Command.InsertBlock.apply)
+    given RootJsonFormat[BlockchainActor.PeerCommand.InsertBlock] =
+        jsonFormat2(BlockchainActor.PeerCommand.InsertBlock.apply)

@@ -1,4 +1,4 @@
-import akka.actor.typed.{ActorRef, ActorSystem}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 
 import akka.stream.*
@@ -8,16 +8,22 @@ import scala.util.{Try, Failure, Success}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 object BlockchainActor:
-    trait Peer:
-        def notifyNewBlock(block: Command.InsertBlock): Unit
-        def getBlocks(): Future[Blockchain]
-
-    enum Command:
-        case CreateBlock(data: Data)
+    enum PeerCommand:
         case GetBlocks(replyTo: ActorRef[Blockchain])
         case InsertBlock(index: Int, block: Block)
+
+    type Peer = ActorRef[PeerCommand]
+
+    enum ControlCommand:
+        case CreateBlock(data: Data)
         case AddPeer(peer: Peer)
+
+    type Command = PeerCommand | ControlCommand
+
+    private enum InternalCommand:
         case SetBlocks(blocks: Blockchain)
+
+    private type EveryCommand = Command | InternalCommand
 
     case class State(
         chain: Blockchain,
@@ -26,22 +32,30 @@ object BlockchainActor:
         mineInProgress: Option[() => Unit]
     )
 
-    def apply() = Behaviors.setup[Command] { context =>
-        new BlockchainActor(context).next(
-            State(Nil, Set.empty, Set.empty, None)
-        )
-    }
+    def apply(): Behavior[Command] = Behaviors
+        .setup[EveryCommand] { context =>
+            new BlockchainActor(context).next(
+                State(Nil, Set.empty, Set.empty, None)
+            )
+        }
+        .narrow[Command]
 
-class BlockchainActor private (context: ActorContext[BlockchainActor.Command])
-    extends JsonSupport:
+class BlockchainActor private (
+    context: ActorContext[BlockchainActor.EveryCommand]
+) extends JsonSupport:
     import BlockchainActor.*
-    import Command.*
+    import PeerCommand.*
+    import ControlCommand.*
+    import InternalCommand.*
 
-    implicit val system: ActorSystem[Nothing] = context.system
-    implicit val systemEc: ExecutionContext = system.executionContext
+    given ActorSystem[Nothing] = context.system
+    given ExecutionContext = context.system.executionContext
+
     val replyToSelf: ActorRef[Command] = context.self
+    val replyToSelfWithBlockchain: ActorRef[Blockchain] =
+        context.messageAdapter(chain => SetBlocks(chain))
 
-    def next(state: State): Behaviors.Receive[Command] =
+    private def next(state: State): Behaviors.Receive[EveryCommand] =
         Behaviors.receiveMessage {
             case CreateBlock(data) =>
                 if state.ourData.contains(data) then
@@ -74,7 +88,9 @@ class BlockchainActor private (context: ActorContext[BlockchainActor.Command])
                 else if index > state.chain.length then
                     // TODO: skip resolve if already doing it
                     context.log.info(s"Received block too new so resolving")
-                    resolve(state)
+                    state.peers.foreach(
+                        _ ! PeerCommand.GetBlocks(replyToSelfWithBlockchain)
+                    )
                     Behaviors.same
                 else if block.prevHash != state.chain.lastHash then
                     context.log.info(
@@ -90,32 +106,20 @@ class BlockchainActor private (context: ActorContext[BlockchainActor.Command])
                 next(state.copy(peers = state.peers + peer))
 
             case SetBlocks(blocks) =>
-                context.log.info(s"Blockchain reset")
-                next(newChain(state, blocks))
+                if blocks.length > state.chain.length && blocks.isValid then
+                    context.log.info(s"Blockchain reset")
+                    next(newChain(state, blocks))
+                else Behaviors.same
         }
 
-    def resolve(state: State): Unit =
-        // longest valid chain is the simplest resolution
-        Source(state.peers)
-            // transform and ignore failures rather than failing the stream
-            .mapAsyncUnordered(4)(_.getBlocks().transform(Success(_)))
-            .collect { case Success(blocks) =>
-                blocks
-            }
-            .fold(state.chain)((currentLongest, next) =>
-                if next.length > currentLongest.length && next.isValid then next
-                else currentLongest
-            )
-            .runForeach(replyToSelf ! SetBlocks(_))
-
-    def newChain(state: State, newChain: Blockchain): State =
+    private def newChain(state: State, newChain: Blockchain): State =
         newChain.lastOption
             // skip broadcast if it's the same
             .filterNot(state.chain.lastOption.contains(_))
             .map[InsertBlock](InsertBlock(newChain.length - 1, _))
             .foreach { block =>
                 context.log.info(s"New last block: $block")
-                state.peers.foreach(_.notifyNewBlock(block))
+                state.peers.foreach(_ ! block)
             }
 
         // cancel the mine in progress because it needs a new prevHash
@@ -134,7 +138,7 @@ class BlockchainActor private (context: ActorContext[BlockchainActor.Command])
 
         state.copy(chain = newChain, mineInProgress = mineInProgress)
 
-    def spawnMiner(chain: Blockchain, data: Data): () => Unit =
+    private def spawnMiner(chain: Blockchain, data: Data): () => Unit =
         val cancel = Promise[Unit]
         // TODO: use a dedicated dispatcher or execution context
         Future {
