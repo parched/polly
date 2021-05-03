@@ -54,7 +54,7 @@ RUN curl -fLO https://static.rust-lang.org/dist/rust-${RUST_VERSION}-x86_64-unkn
 
 ARG PYTHON_VERSION=3.9
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  install software-properties-common \
+  software-properties-common \
   && add-apt-repository -u -y ppa:deadsnakes/ppa && apt-get install -y --no-install-recommends \
   python${PYTHON_VERSION} \
   && rm -rf /var/lib/apt/lists/*
