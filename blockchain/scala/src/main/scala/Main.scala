@@ -56,7 +56,7 @@ object Main extends JsonSupport:
     )(using ActorSystem[Nothing], ExecutionContext): Behavior[Uri] =
         Behaviors.receive[Uri]((context, uri) =>
             val peer =
-                context.spawn(sendHttpRequestOnPeerCommand(uri), s"Peer @ $uri")
+                context.spawn(sendHttpRequestOnPeerCommand(uri), s"Peer@${uri.authority}")
             addTo ! BlockchainActor.ControlCommand.AddPeer(peer)
             Behaviors.same
         )
