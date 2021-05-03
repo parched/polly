@@ -52,10 +52,11 @@ RUN curl -fLO https://static.rust-lang.org/dist/rust-${RUST_VERSION}-x86_64-unkn
   && rust*/install.sh \
   && rm -rf rust*
 
+
 ARG PYTHON_VERSION=3.9
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  software-properties-common \
-  && add-apt-repository -u -y ppa:deadsnakes/ppa && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+RUN printf "deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu $(lsb_release -cs) main\ndeb-src http://ppa.launchpad.net/deadsnakes/ppa/ubuntu $(lsb_release -cs) main\n" >> /etc/apt/sources.list
+  && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776
+  && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   python${PYTHON_VERSION} \
   && rm -rf /var/lib/apt/lists/*
 
