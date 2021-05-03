@@ -1,5 +1,5 @@
 import akka.actor.typed.scaladsl.AskPattern.*
-import akka.actor.typed.{ActorRef, Behavior, ActorSystem}
+import akka.actor.typed.{ActorRef, Behavior, ActorSystem, Props, SpawnProtocol}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.*
@@ -16,14 +16,12 @@ import scala.io.StdIn
 
 import spray.json.enrichAny
 
-import BlockchainActor.{Command, PeerCommand}
-
 object Main extends JsonSupport:
     def sendHttpRequestOnPeerCommand(
         uri: Uri
     )(using ActorSystem[Nothing], ExecutionContext) =
-        Behaviors.receiveMessage[PeerCommand] {
-            case block: PeerCommand.InsertBlock =>
+        Behaviors.receiveMessage[BlockchainActor.PeerCommand] {
+            case block: BlockchainActor.PeerCommand.InsertBlock =>
                 Http()
                     .singleRequest(
                         HttpRequest(
@@ -38,7 +36,7 @@ object Main extends JsonSupport:
                     .map(_.discardEntityBytes())
                 Behaviors.same
 
-            case PeerCommand.GetBlocks(replyTo) =>
+            case BlockchainActor.PeerCommand.GetBlocks(replyTo) =>
                 Http()
                     .singleRequest(
                         HttpRequest(
@@ -51,20 +49,10 @@ object Main extends JsonSupport:
                 Behaviors.same
         }
 
-    def onUriCreatePeerAndAdd(
-        addTo: ActorRef[BlockchainActor.Command]
-    )(using ActorSystem[Nothing], ExecutionContext): Behavior[Uri] =
-        Behaviors.receive[Uri]((context, uri) =>
-            val peer =
-                context.spawn(sendHttpRequestOnPeerCommand(uri), s"Peer@${uri.authority}")
-            addTo ! BlockchainActor.ControlCommand.AddPeer(peer)
-            Behaviors.same
-        )
-
     def startHttpServer(
         port: Int,
         blockchain: ActorRef[BlockchainActor.Command],
-        peerSpawner: ActorRef[Uri]
+        peerSpawner: ActorRef[SpawnProtocol.Command]
     )(using ActorSystem[Nothing], ExecutionContext) =
         given timeout: Timeout = 5.seconds
 
@@ -95,8 +83,19 @@ object Main extends JsonSupport:
                 // TODO: validate as much a possible
                 val uri = Uri(uriRaw).withoutFragment // discard other bits
 
-                peerSpawner ! uri
-                complete("peer inserted")
+                onSuccess(
+                    peerSpawner.ask[ActorRef[BlockchainActor.PeerCommand]](
+                        SpawnProtocol.Spawn(
+                            sendHttpRequestOnPeerCommand(uri),
+                            s"Peer@${uri.authority}",
+                            Props.empty,
+                            _
+                        )
+                    )
+                ) { peer =>
+                    blockchain ! BlockchainActor.ControlCommand.AddPeer(peer)
+                    complete("peer inserted")
+                }
             }
         )
 
@@ -111,7 +110,7 @@ object Main extends JsonSupport:
         val port = args.lift(0).map(_.toInt).getOrElse(8080)
 
         val system = ActorSystem(
-            Behaviors.setup[Uri](context =>
+            Behaviors.setup[SpawnProtocol.Command](context =>
                 given ActorSystem[Nothing] = context.system
                 given ExecutionContext = context.system.executionContext
 
@@ -120,7 +119,8 @@ object Main extends JsonSupport:
                     "Blockchain"
                 )
                 startHttpServer(port, blockchainActor, context.self)
-                onUriCreatePeerAndAdd(blockchainActor)
+
+                SpawnProtocol()
             ),
             "Gaurdian"
         )
