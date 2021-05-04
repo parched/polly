@@ -52,7 +52,6 @@ RUN curl -fLO https://static.rust-lang.org/dist/rust-${RUST_VERSION}-x86_64-unkn
   && rust*/install.sh \
   && rm -rf rust*
 
-
 ARG PYTHON_VERSION=3.9
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   software-properties-common \
@@ -64,5 +63,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 ENV PEOTRY_VERSION=1.1.6
 ENV POETRY_HOME=/opt/poetry
 ENV PATH ${PATH}:${POETRY_HOME}/bin
-RUN curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/${PEOTRY_VERSION}/get-poetry.py | python - --no-modify-path \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  python-is-python3 \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/${PEOTRY_VERSION}/get-poetry.py | python - --no-modify-path \
   && poetry completions bash > /etc/bash_completion.d/poetry.bash-completion
