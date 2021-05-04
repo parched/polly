@@ -55,15 +55,11 @@ RUN curl -fLO https://static.rust-lang.org/dist/rust-${RUST_VERSION}-x86_64-unkn
 
 ARG PYTHON_VERSION=3.9
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  gnupg \
-  && . /etc/os-release \
-  && printf "deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu $UBUNTU_CODENAME main\ndeb-src http://ppa.launchpad.net/deadsnakes/ppa/ubuntu $UBUNTU_CODENAME main\n" >> /etc/apt/sources.list \
-  && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776 \
+  software-properties-common \
+  && add-apt-repository -y ppa:deadsnakes/ppa \
   && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  python${PYTHON_VERSION} \
-  && rm -rf /var/lib/apt/lists/* \
-  && ln -s /usr/bin/python3.9 /usr/bin/python3 \
-  && ln -s /usr/bin/python3 /usr/bin/python
+  python${PYTHON_VERSION}-full \
+  && rm -rf /var/lib/apt/lists/*
 
 ENV PEOTRY_VERSION=1.1.6
 ENV POETRY_HOME=/opt/poetry
