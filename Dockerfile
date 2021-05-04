@@ -66,5 +66,5 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 ENV PEOTRY_VERSION=1.1.6
 ENV POETRY_HOME=/opt/poetry
 ENV PATH ${PATH}:${POETRY_HOME}/bin
-RUN curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/${PEOTRY_VERSION}/get-poetry.py | python - --no-modify-path \
+RUN curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/${PEOTRY_VERSION}/get-poetry.py | python${PYTHON_VERSION} - --no-modify-path \
   && poetry completions bash > /etc/bash_completion.d/poetry.bash-completion
