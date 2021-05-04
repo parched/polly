@@ -66,5 +66,5 @@ ENV PATH ${PATH}:${POETRY_HOME}/bin
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   python-is-python3 \
   && rm -rf /var/lib/apt/lists/* \
-  && curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/${PEOTRY_VERSION}/get-poetry.py | python - --no-modify-path \
+  && curl -sSL https://raw.githubusercontent.com/parched/poetry/patch-1/get-poetry.py | python - --no-modify-path \
   && poetry completions bash > /etc/bash_completion.d/poetry.bash-completion
