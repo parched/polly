@@ -1,23 +1,21 @@
 import React from 'react';
 
 interface Props {
+    onFileChanged: (file: File) => void
 }
 
-interface State {
-    file?: File
-}
-
-export default class KeyFile extends React.Component<Props, State> {
+export default class KeyFile extends React.Component<Props> {
   constructor(props: Props) {
     super(props);
-    this.state = {};
 
     this.handleChange = this.handleChange.bind(this);
   }
 
   handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.currentTarget.files
-    this.setState({file: (files ? files[0] : undefined)});
+    if (files) {
+        this.props.onFileChanged(files[0]);
+    }
   }
 
   render() {
