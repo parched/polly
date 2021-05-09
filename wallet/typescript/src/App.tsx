@@ -3,6 +3,7 @@ import logo from './logo.svg';
 import './App.css';
 import ServerForm from './ServerForm'
 import KeyFile from './KeyFile'
+import Balance from './Balance'
 
 function App() {
   return (
@@ -14,6 +15,9 @@ function App() {
         </p>
         <p>
           <KeyFile />
+        </p>
+        <p>
+          <Balance TODO lift url and address/>
         </p>
       </header>
     </div>
