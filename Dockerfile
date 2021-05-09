@@ -68,3 +68,20 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
   && rm -rf /var/lib/apt/lists/* \
   && curl -sSL https://raw.githubusercontent.com/parched/poetry/patch-1/get-poetry.py | python - --no-modify-path \
   && poetry completions bash > /etc/bash_completion.d/poetry.bash-completion
+
+# Node Version Manager
+ARG NVM_VERSION 0.38.0
+ARG NVM_DIR /opt/nvm
+RUN apt-get update && apt-get install -y \
+  curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p $NVM_DIR \
+  && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash \
+  && ln -s $NVM_DIR/nvm.sh /etc/profile.d/50-nvm.sh
+
+# Node.js
+ARG NODE_VERSION 16
+RUN bash -c ". $NVM_DIR/nvm.sh \
+    && nvm install $NODE_VERSION \
+    && nvm use $NODE_VERSION \
+    && nvm alias default $NODE_VERSION
