@@ -70,8 +70,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
   && poetry completions bash > /etc/bash_completion.d/poetry.bash-completion
 
 # Node Version Manager
-ARG NVM_VERSION 0.38.0
-ARG NVM_DIR /opt/nvm
+ARG NVM_VERSION=0.38.0
+ARG NVM_DIR=/opt/nvm
 RUN apt-get update && apt-get install -y \
   curl \
   && rm -rf /var/lib/apt/lists/* \
@@ -80,7 +80,7 @@ RUN apt-get update && apt-get install -y \
   && ln -s $NVM_DIR/nvm.sh /etc/profile.d/50-nvm.sh
 
 # Node.js
-ARG NODE_VERSION 16
+ARG NODE_VERSION=16
 RUN bash -c ". $NVM_DIR/nvm.sh \
     && nvm install $NODE_VERSION \
     && nvm use $NODE_VERSION \
