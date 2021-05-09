@@ -84,4 +84,4 @@ ARG NODE_VERSION=16
 RUN bash -c ". $NVM_DIR/nvm.sh \
     && nvm install $NODE_VERSION \
     && nvm use $NODE_VERSION \
-    && nvm alias default $NODE_VERSION
+    && nvm alias default $NODE_VERSION"
