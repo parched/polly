@@ -63,7 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && tar -xf sbt*.tgz \
   && rm sbt*.tgz \
   && mkdir -p $SBT_GLOBAL_BASE $SBT_BOOT_DIR $SBT_COURSIER_HOME $SBT_IVY_HOME \
-  && sbt --version \
+  && sbt sbtVersion \
   && chmod -R go=u $SBT_GLOBAL_BASE $SBT_BOOT_DIR $SBT_COURSIER_HOME $SBT_IVY_HOME
 
 # Karate
