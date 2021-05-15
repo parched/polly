@@ -50,13 +50,20 @@ ENV NATIVE_IMAGE_INSTALLED=true
 # SBT (for Scala)
 ARG SBT_VERSION=1.5.2
 ENV PATH=${PATH}:/opt/sbt/bin
+ARG SBT_GLOBAL_BASE=/opt/sbt/base
+ARG SBT_COURSIER_HOME=/opt/sbt/coursier
+ARG SBT_IVY_HOME=/opt/sbt/ivy2
+ENV SBT_OPTS="-Dsbt.global.base=$SBT_GLOBAL_BASE -Dsbt.coursier.home=$SBT_COURSIER_HOME -Dsbt.ivy.home=$SBT_IVY_HOME"
 RUN apt-get update && apt-get install -y --no-install-recommends \
   openjdk-11-jdk-headless \
   && rm -rf /var/lib/apt/lists/* \
   && cd /opt \
   && curl -fLO https://github.com/sbt/sbt/releases/download/v${SBT_VERSION}/sbt-${SBT_VERSION}.tgz \
   && tar -xf sbt*.tgz \
-  && rm sbt*.tgz
+  && rm sbt*.tgz \
+  && mkdir -p $SBT_GLOBAL_BASE $SBT_COURSIER_HOME $SBT_IVY_HOME \
+  && sbt --version \
+  && chmod -R go=u $SBT_GLOBAL_BASE $SBT_COURSIER_HOME $SBT_IVY_HOME
 
 # Karate
 ARG KARATE_VERSION=1.0.1
