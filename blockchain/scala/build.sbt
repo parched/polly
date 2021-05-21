@@ -1,4 +1,4 @@
-val AkkaVersion = "2.6.8"
+val AkkaVersion = "2.6.14"
 val AkkaHttpVersion = "10.2.4"
 
 lazy val root = project
@@ -7,7 +7,7 @@ lazy val root = project
     name := "polly",
     version := "0.1.0",
 
-    scalaVersion := "3.0.0-RC2",
+    scalaVersion := "3.0.0",
 
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
@@ -18,5 +18,5 @@ lazy val root = project
 
     libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "1.7.28",
 
-    libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.7" % "test",
+    libraryDependencies += "org.scalatest" %% "scalatest-flatspec" % "3.2.9" % "test",
   )

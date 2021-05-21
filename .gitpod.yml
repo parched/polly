@@ -8,4 +8,4 @@ ports:
 vscode:
   extensions:
     - scala-lang.scala@0.5.0:3FIiaU1vnooQsX3PkBlBvQ==
-    - scalameta.metals@1.10.4:bdae996e18250a33011b8e31d475a845
+    - scalameta.metals@1.10.5:03a18b393caf613812c31d416cf7f53f
