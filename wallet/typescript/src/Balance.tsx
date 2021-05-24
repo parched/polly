@@ -32,7 +32,7 @@ export default class Balance extends React.Component<Props, State> {
 
   componentDidMount() {
       this.fetchBalance()
-      .catch(reason => reason) // just print the error instead of balance
+      .catch(reason => reason.message) // just print the error instead of balance
       .then(b => {
           if (!this.isUnmounted) {
               this.setState({balance: b})

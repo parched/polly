@@ -24,7 +24,7 @@ class App extends React.Component<{}, State> {
                         <KeyFile onFileChanged={file => this.setState({ keyFile: file })} />
                     </p>
                     <p>
-                        <Balance url={this.state.serverUrl} />
+                        <Balance url={this.state.serverUrl} address={new Uint8Array() /* TODO */}/>
                     </p>
                 </header>
             </div>
