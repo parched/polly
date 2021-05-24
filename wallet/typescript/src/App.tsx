@@ -1,35 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import logo from './logo.svg';
 import './App.css';
 import ServerForm from './ServerForm'
 import KeyFile from './KeyFile'
 import Balance from './Balance'
 
-interface State {
-    serverUrl: string
-    keyFile?: File
+export default function App() {
+    const [serverUrl, setServerUrl] = useState<string>("http://localhost:8080");
+    const [keyFile, setKeyFile] = useState<File | undefined>(undefined);
+
+    return (
+        <div className="App">
+            <header className="App-header">
+                <img src={logo} className="App-logo" alt="logo" />
+                <p>
+                    <ServerForm defaultUrl={serverUrl} onUrlChange={setServerUrl} />
+                </p>
+                <p>
+                    <KeyFile onFileChanged={setKeyFile} />
+                </p>
+                <p>
+                    <Balance url={serverUrl} address={new Uint8Array() /* TODO */} />
+                </p>
+            </header>
+        </div>
+    );
 }
 
-class App extends React.Component<{}, State> {
-    state = { serverUrl: "http://localhost:8080" }
-    render() {
-        return (
-            <div className="App">
-                <header className="App-header">
-                    <img src={logo} className="App-logo" alt="logo" />
-                    <p>
-                        <ServerForm defaultUrl={this.state.serverUrl} onUrlChange={url => this.setState({ serverUrl: url })} />
-                    </p>
-                    <p>
-                        <KeyFile onFileChanged={file => this.setState({ keyFile: file })} />
-                    </p>
-                    <p>
-                        <Balance url={this.state.serverUrl} address={new Uint8Array() /* TODO */}/>
-                    </p>
-                </header>
-            </div>
-        );
-    }
-}
-
-export default App;
