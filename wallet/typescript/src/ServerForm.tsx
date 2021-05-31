@@ -1,11 +1,9 @@
-import React from 'react';
-
 interface Props {
     defaultUrl: string
     onUrlChange: (url: string) => void
 }
 
-export default function ServerForm(props: Props) {
+export default function ServerForm(props: Props): JSX.Element {
     return (
         <label>
             Server URL:
