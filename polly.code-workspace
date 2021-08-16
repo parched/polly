@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "wallet/rust"
+		},
+		{
+			"path": "wallet/typescript"
+		},
+		{
+			"path": "blockchain/python"
+		},
+		{
+			"path": "blockchain/scala"
+		},
+		{
+			"path": "blockchain/tests"
+		}
+	],
+	"settings": {}
+}
